@@ -1,0 +1,15 @@
+
+[package]
+name = "intvg"
+version = "0.1.0"
+edition = "2021"
+description = "Rust lib/tools to load/parse/save tvg files, from svg file by usvg"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+byteorder = "1.4"
+usvg = "0.35"
+
+[workspace]
+
