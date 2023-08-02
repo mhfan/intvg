@@ -11,5 +11,8 @@ description = "Rust lib/tools to load/parse/save tvg files, from svg file by usv
 byteorder = "1.4"
 usvg = "0.35"
 
+[dev-dependencies]
+#rexpect = "0.5"
+
 [workspace]
 
