@@ -2,7 +2,7 @@
 //pub mod TinyVG {
 
 use std::{io, fmt::{self, Display, Formatter}, marker::PhantomData};
-use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+//use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use std::num::TryFromIntError;
 
 #[derive(Debug)] pub enum ErrorKind {   IO(io::Error), IntError(TryFromIntError),
@@ -95,26 +95,26 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
     }
 
     pub fn load(&mut self, reader: &mut R) -> Result<()> {
-        let val = reader.read_u16::<LE>()?;     if  val != TVG_MAGIC {
+        let val = reader.read_u16_le()?;    if  val != TVG_MAGIC {
             return Err(TVGError { kind: ErrorKind::InvalidData(val as u8),
                 msg: "incorrect magic number" });
         }
-        let val = reader.read_u8()?;            if  val != TVG_VERSION {
+        let val  = reader.read_u8()?;       if  val != TVG_VERSION {
             return Err(TVGError { kind: ErrorKind::InvalidData(val), msg: "incorrect version" });
         }
 
         let val = reader.read_u8()?;   self.header.scale = val & 0x0F;
         self.header.coordinate_range = match val >> 6 {
-            0 => {  self.header.width  = reader.read_u16::<LE>()? as u32;
-                    self.header.height = reader.read_u16::<LE>()? as u32;
+            0 => {  self.header.width  = reader.read_u16_le()? as u32;
+                    self.header.height = reader.read_u16_le()? as u32;
                 self.read_range = Self::read_default;  CoordinateRange::Default
             }
             1 => {  self.header.width  = reader.read_u8()? as u32;
                     self.header.height = reader.read_u8()? as u32;
                 self.read_range = Self::read_reduced;  CoordinateRange::Reduced
             }
-            2 => {  self.header.width  = reader.read_u32::<LE>()?;
-                    self.header.height = reader.read_u32::<LE>()?;
+            2 => {  self.header.width  = reader.read_u32_le()?;
+                    self.header.height = reader.read_u32_le()?;
                 self.read_range = Self::read_enhanced; CoordinateRange::Enhanced
             }
             x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
@@ -130,17 +130,17 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
                 })} ColorEncoding::RGBA8888
             }
 
-            1 => { for _ in 0..color_count { let val = reader.read_u16::<LE>()?;
+            1 => { for _ in 0..color_count { let val = reader.read_u16_le()?;
                 self.color_table.push(RGBA8888 {    r: ((val & 0x001F) << 3) as u8,
                     g: ((val & 0x07E0) >> 3) as u8, b: ((val & 0xF800) >> 8) as u8, a: 255,
                 })} ColorEncoding::RGB565
             }
 
             2 => { for _ in 0..color_count { self.color_table.push(RGBA8888 {
-                    r: (reader.read_f32::<LE>()? * 255.0) as u8,
-                    g: (reader.read_f32::<LE>()? * 255.0) as u8,
-                    b: (reader.read_f32::<LE>()? * 255.0) as u8,
-                    a: (reader.read_f32::<LE>()? * 255.0) as u8,
+                    r: (reader.read_f32_le()? * 255.0) as u8,
+                    g: (reader.read_f32_le()? * 255.0) as u8,
+                    b: (reader.read_f32_le()? * 255.0) as u8,
+                    a: (reader.read_f32_le()? * 255.0) as u8,
                 })} ColorEncoding::RGBAf32
             }
 
@@ -300,32 +300,32 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
     }
 
     #[inline] fn read_default (reader: &mut R) ->
-        io::Result<i32> { reader.read_i16::<LE>().map(i32::from) }
+        io::Result<i32> { reader.read_i16_le().map(i32::from) }
     #[inline] fn read_reduced (reader: &mut R) ->
         io::Result<i32> { reader.read_i8().map(i32::from) }
-    #[inline] fn read_enhanced(reader: &mut R) -> io::Result<i32> { reader.read_i32::<LE>() }
+    #[inline] fn read_enhanced(reader: &mut R) -> io::Result<i32> { reader.read_i32_le() }
 
     #[inline] fn read_unit(&self, reader: &mut R) -> Result<Unit> {
         Ok((self.read_range)(reader)? as f32 / (1u32 << self.header.scale) as f32)
     }
 
     pub fn save(&mut self, writer: &mut W) -> Result<()> {
-        writer.write_u16::<LE>(TVG_MAGIC)?;     writer.write_u8(TVG_VERSION)?;
+        writer.write_u16_le(TVG_MAGIC)?;    writer.write_u8(TVG_VERSION)?;
         writer.write_u8((self.header.coordinate_range as u8) << 6 |
                         (self.header.color_encoding   as u8) << 4 | self.header.scale)?;
 
         match self.header.coordinate_range {
             CoordinateRange::Default  => {  self.write_range = Self::write_default;
-                writer.write_u16::<LE>(self.header.width .try_into()?)?;
-                writer.write_u16::<LE>(self.header.height.try_into()?)?;
+                writer.write_u16_le(self.header.width .try_into()?)?;
+                writer.write_u16_le(self.header.height.try_into()?)?;
             }
             CoordinateRange::Reduced  => {  self.write_range = Self::write_reduced;
                 writer.write_u8(self.header.width .try_into()?)?;
                 writer.write_u8(self.header.height.try_into()?)?;
             }
             CoordinateRange::Enhanced => {  self.write_range = Self::write_enhanced;
-                writer.write_u32::<LE>(self.header.width)?;
-                writer.write_u32::<LE>(self.header.height)?;
+                writer.write_u32_le(self.header.width)?;
+                writer.write_u32_le(self.header.height)?;
             }
         }
 
@@ -338,15 +338,15 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
                 })?,
             ColorEncoding::RGB565 =>
                 self.color_table.iter().try_for_each(|color| -> Result<()> {
-                    writer.write_u16::<LE>(        (color.r as u16  >> 3) |
+                    writer.write_u16_le((color.r as u16  >> 3) |
                         ((color.g as u16) << 3) | ((color.b as u16) << 8))?;    Ok(())
                 })?,
             ColorEncoding::RGBAf32 =>
                 self.color_table.iter().try_for_each(|color| -> Result<()> {
-                    writer.write_f32::<LE>(color.r as f32 / 255.0)?;
-                    writer.write_f32::<LE>(color.g as f32 / 255.0)?;
-                    writer.write_f32::<LE>(color.b as f32 / 255.0)?;
-                    writer.write_f32::<LE>(color.a as f32 / 255.0)?;    Ok(())
+                    writer.write_f32_le(color.r as f32 / 255.0)?;
+                    writer.write_f32_le(color.g as f32 / 255.0)?;
+                    writer.write_f32_le(color.b as f32 / 255.0)?;
+                    writer.write_f32_le(color.a as f32 / 255.0)?;    Ok(())
                 })?,
         }
 
@@ -431,7 +431,7 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
 
     fn write_path(&self, coll: &Vec<Segment>, writer: &mut W) -> Result<()> {
         coll.iter().try_for_each(|seg| -> Result<()> {
-            writer.write_var_uint(seg.cmds.len() as u32 - 1)
+            Ok(writer.write_var_uint(seg.cmds.len() as u32 - 1)?)
         })?;
 
         coll.iter().try_for_each(|seg| self.write_segment(seg, writer))
@@ -488,14 +488,14 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
                !(color_index.1 < self.color_table.len() as u32) { return Err(TVGError {
                 kind: ErrorKind::OutOfRange, msg: "invalid color index" }) }
             self.write_point(&points.0, writer)?;   self.write_point(&points.1, writer)?;
-            writer.write_var_uint(color_index.0)?;  writer.write_var_uint(color_index.1)
+            writer.write_var_uint(color_index.0)?;  Ok(writer.write_var_uint(color_index.1)?)
         };
 
         match style {
             Style::FlatColor(color_index) => {
                 if !(*color_index < self.color_table.len() as u32) { return Err(TVGError {
                     kind: ErrorKind::OutOfRange, msg: "invalid color index" }) }
-                writer.write_var_uint(*color_index)
+                Ok(writer.write_var_uint(*color_index)?)
             }
             Style::LinearGradient { points, color_index } =>
                 write_gradient(points, color_index),
@@ -517,12 +517,12 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         self.write_unit(point.x, writer)?;  self.write_unit(point.y, writer)
     }
 
-    #[inline] fn write_default (writer: &mut W, val: i32) -> Result<()> {
-        Ok(writer.write_i16::<LE>(val.try_into()?)?) }
-    #[inline] fn write_reduced (writer: &mut W, val: i32) -> Result<()> {
-        Ok(writer.write_i8(val.try_into()?)?) }
-    #[inline] fn write_enhanced(writer: &mut W, val: i32) -> Result<()> {
-        Ok(writer.write_i32::<LE>(val)?) }  // XXX: i16::try_from(val)?.to_le_bytes()
+    #[inline] fn write_default (writer: &mut W, val: i32) ->
+        Result<()> { Ok(writer.write_i16_le(val.try_into()?)?) }
+    #[inline] fn write_reduced (writer: &mut W, val: i32) ->
+        Result<()> { Ok(writer.write_i8(val.try_into()?)?) }
+    #[inline] fn write_enhanced(writer: &mut W, val: i32) ->
+        Result<()> { Ok(writer.write_i32_le(val)?) }
 
     fn write_unit(&self, val: Unit, writer: &mut W)-> Result<()> {
         Ok((self.write_range)(writer, (val * (1u32 << self.header.scale) as f32) as i32)?)
@@ -583,6 +583,26 @@ type VarUInt = u32;
 type Unit = f32;
 
 trait TVGRead: io::Read  {
+    /*#[inline] fn read_value<T>(&mut self) -> io::Result<T> {
+        let mut buf = [0; core::mem::size_of::<T>()];
+        self.read_exact(&mut buf)?; Ok(T::from_le_bytes(buf))
+    }*/
+
+    #[inline] fn read_u8(&mut self) -> io::Result<u8> {
+        let mut buf = [0; 1]; self.read_exact(&mut buf)?; Ok(buf[0]) }
+    #[inline] fn read_i8(&mut self) -> io::Result<i8> {
+        let mut buf = [0; 1]; self.read_exact(&mut buf)?; Ok(buf[0] as i8) }
+    #[inline] fn read_u16_le(&mut self) -> io::Result<u16> {
+        let mut buf = [0; 2]; self.read_exact(&mut buf)?; Ok(u16::from_le_bytes(buf)) }
+    #[inline] fn read_i16_le(&mut self) -> io::Result<i16> {
+        let mut buf = [0; 2]; self.read_exact(&mut buf)?; Ok(i16::from_le_bytes(buf)) }
+    #[inline] fn read_u32_le(&mut self) -> io::Result<u32> {
+        let mut buf = [0; 4]; self.read_exact(&mut buf)?; Ok(u32::from_le_bytes(buf)) }
+    #[inline] fn read_i32_le(&mut self) -> io::Result<i32> {
+        let mut buf = [0; 4]; self.read_exact(&mut buf)?; Ok(i32::from_le_bytes(buf)) }
+    #[inline] fn read_f32_le(&mut self) -> io::Result<f32> {    // read_f32::<LE>()
+        let mut buf = [0; 4]; self.read_exact(&mut buf)?; Ok(f32::from_le_bytes(buf)) }
+
     fn  read_var_uint(&mut self) -> Result<VarUInt> {
         let (mut val, mut cnt) = (0u32, 0);
         loop {  let tmp = self.read_u8()?;  //self.read(&mut buf)?;
@@ -596,7 +616,24 @@ trait TVGRead: io::Read  {
 }
 
 trait TVGWrite: io::Write {
-    fn write_var_uint(&mut self, mut val: u32)-> Result<()> {
+    /*#[inline] fn write_value<T>(&mut self, n: T) ->
+        io::Result<()> { self.write_all(&n.to_le_bytes()) }
+    }*/
+
+    #[inline] fn write_u8(&mut self, n: u8) -> io::Result<()> { self.write_all(&[n]) }
+    #[inline] fn write_i8(&mut self, n: i8) -> io::Result<()> { self.write_all(&[n as u8]) }
+    #[inline] fn write_u16_le(&mut self, n: u16) ->     // write_u16::<LE>(n)
+        io::Result<()> { self.write_all(&n.to_le_bytes()) }
+    #[inline] fn write_i16_le(&mut self, n: i16) ->
+        io::Result<()> { self.write_all(&n.to_le_bytes()) }
+    #[inline] fn write_u32_le(&mut self, n: u32) ->
+        io::Result<()> { self.write_all(&n.to_le_bytes()) }
+    #[inline] fn write_i32_le(&mut self, n: i32) ->
+        io::Result<()> { self.write_all(&n.to_le_bytes()) }
+    #[inline] fn write_f32_le(&mut self, n: f32) ->
+        io::Result<()> { self.write_all(&n.to_le_bytes()) }
+
+    fn write_var_uint(&mut self, mut val: u32)-> io::Result<()> {
         loop {  let flag = val < 0x80;
             let tmp = (val & 0x7F) as u8;   //cnt += 1;
             self.write_u8(if flag { tmp } else { tmp | 0x80 })?;

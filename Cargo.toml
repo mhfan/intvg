@@ -8,7 +8,7 @@ description = "Rust lib/tools to load/parse/save tvg files, from svg file by usv
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-byteorder = "1.4"
+#byteorder = "1.4"
 usvg = "0.35"
 
 [dev-dependencies]
