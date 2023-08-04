@@ -9,7 +9,10 @@ description = "Rust lib/tools to load/parse/save tvg files, from svg file by usv
 
 [dependencies]
 #byteorder = "1.4"
+#tiny-skia-path = "0.11"
+tiny-skia = "0.11"
 usvg = "0.35"
+kurbo = "0.9"   # Bezier curves utils
 
 [dev-dependencies]
 #rexpect = "0.5"
