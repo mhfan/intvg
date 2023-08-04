@@ -1,13 +1,14 @@
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{env, fs::{self, File}, io::{BufReader, BufWriter}};
-    use intvg::{tinyvg::TVGImage, render::Render};
+    use intvg::{tinyvg::TVGImage, render::Render, convert::Convert};
     use usvg::TreeParsing;
 
-    let uopt = usvg::Options::default();
     let path = env::args().skip(1).next()
         .ok_or("path not specified").unwrap_or("examples/files/tiger.svg".to_owned());
-    let _tree = usvg::Tree::from_data(&fs::read(path)?, &uopt)?;
+    let tree = usvg::Tree::from_data(&fs::read(path)?, &usvg::Options::default())?;
+    let mut tvg = TVGImage::from_usvg(&tree);
+    tvg.save(&mut BufWriter::new(File::create("target/foo.tvg")?))?;
 
     let path = env::args().skip(1).next()
         .ok_or("path not specified").unwrap_or("examples/files/tiger.tvg".to_owned());

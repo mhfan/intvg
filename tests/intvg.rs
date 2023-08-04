@@ -1,7 +1,7 @@
 
 #[test] fn tinyvg() -> Result<(), Box<dyn std::error::Error>> {
     use std::{fs::{self, File}, io::{BufReader, BufWriter}};
-    use intvg::{tinyvg::TVGImage, render::Render};
+    use intvg::{tinyvg::TVGImage, render::Render, convert::Convert};
 
     //let mut ptys = rexpect::spawn(concat!(env!("CARGO_BIN_EXE_intvg"),
     //    ""), Some(1_000))?;     ptys.exp_eof()?;
@@ -9,6 +9,12 @@
     let mut tvg = TVGImage::new();
     assert!(tvg.load(&mut BufReader::new(File::open("examples/files/tiger.svg")?))
         .is_err_and(|e| { eprintln!("{e}\n{e:?}"); true }));    // coverage TVGError
+
+    use usvg::TreeParsing;
+    let tree = usvg::Tree::from_data(&fs::read("examples/files/tiger.svg")?,
+        &usvg::Options::default())?;
+    let mut tvg = TVGImage::from_usvg(&tree);
+    tvg.save(&mut BufWriter::new(File::create("target/foo.tvg")?))?;
 
     tvg.load(&mut BufReader::new(File::open("examples/files/tiger.tvg")?))?;
     tvg.render()?.save_png("target/foo.png")?;
