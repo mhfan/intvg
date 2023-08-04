@@ -31,16 +31,16 @@ impl Display for TVGError {
 
 impl std::error::Error for TVGError { }
 
-impl From<ErrorKind> for TVGError {
-    fn from(kind: ErrorKind) -> Self { TVGError { kind, msg: "" } }
-}
+//impl From<ErrorKind> for TVGError {
+//    fn from(kind: ErrorKind) -> Self { Self { kind, msg: "" } }
+//}
 
 impl From<io::Error> for TVGError {
-    fn from(e: io::Error) -> Self { TVGError { kind: ErrorKind::IO(e), msg: "" } }
+    fn from(e: io::Error) -> Self { Self { kind: ErrorKind::IO(e), msg: "" } }
 }
 
 impl From<TryFromIntError> for TVGError {
-    fn from(e: TryFromIntError) -> Self { TVGError { kind: ErrorKind::IntError(e), msg: "" } }
+    fn from(e: TryFromIntError) -> Self { Self { kind: ErrorKind::IntError(e), msg: "" } }
 }
 
 //  https://tinyvg.tech/download/specification.txt
@@ -70,14 +70,14 @@ impl From<TryFromIntError> for TVGError {
 
 pub type TVGImage = Image<std::io::BufReader<std::fs::File>>;
 pub struct Image<R,   W = std::io::BufWriter<std::fs::File>> {
-    header: Header,     // In-memory representation of a TinyVG file
-    color_table: Vec<RGBA8888>,    // colors used in this image
-    commands: Vec<Command>,     // commands required to render this image
-    trailer: Vec<u8>,   // Remaining data after the TinyVG image ended (EOF).
+    pub header: Header,     // In-memory representation of a TinyVG file
+    color_table:  Vec<RGBA8888>,    // colors used in this image
+    pub commands: Vec<Command>,     // commands required to render this image
+    pub trailer:  Vec<u8>,  // Remaining data after the TinyVG image ended (EOF).
     // Can be used for arbitrary metadata, it is not defined by the spec.
 
-     read_range: fn(&mut R) ->  io::Result<i32>,
     write_range: fn(&mut W, i32) -> Result<()>,
+     read_range: fn(&mut R) ->  io::Result<i32>,
     _reader: PhantomData<R>, _writer: PhantomData<W>,
 }
 
@@ -92,6 +92,13 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
              read_range: Self::read_default, write_range: Self::write_default,
             _reader: PhantomData, _writer: PhantomData
         }
+    }
+
+    pub fn lookup_color(&self, idx: VarUInt) -> RGBA8888 { self.color_table[idx as usize] }
+    pub fn push_color(&mut self, color: RGBA8888) -> VarUInt {
+        if let Some(idx) = self.color_table.iter().position(|c|
+            c.r == color.r && c.g == color.g && c.b == color.b && c.a == color.a) { idx as u32
+        } else { self.color_table.push(color);  self.color_table.len() as u32 - 1 }
     }
 
     pub fn load(&mut self, reader: &mut R) -> Result<()> {
@@ -137,28 +144,22 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
             }
 
             2 => { for _ in 0..color_count { self.color_table.push(RGBA8888 {
-                    r: (reader.read_f32_le()? * 255.0) as u8,
-                    g: (reader.read_f32_le()? * 255.0) as u8,
-                    b: (reader.read_f32_le()? * 255.0) as u8,
-                    a: (reader.read_f32_le()? * 255.0) as u8,
+                    r: (reader.read_f32_le()? * 255.0 + 0.5) as u8,
+                    g: (reader.read_f32_le()? * 255.0 + 0.5) as u8,
+                    b: (reader.read_f32_le()? * 255.0 + 0.5) as u8,
+                    a: (reader.read_f32_le()? * 255.0 + 0.5) as u8,
                 })} ColorEncoding::RGBAf32
             }
 
             x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
                     msg: "custom color encoding is not supported" }) //ColorEncoding::Custom,
-        };
+        };  eprintln!("{:?}", &self.header);
 
         loop {  let cmd = self.read_command(reader)?;
             if let Command::EndOfDocument = cmd {
                 reader.read_to_end(&mut self.trailer)?; break
             }   self.commands.push(cmd);
         }   Ok(())
-    }
-
-    pub fn digest(&self, debug: bool) {  println!("{:?}", &self.header);
-        println!("color table: {}, commands: {}, trailer: {}",
-            self.color_table.len(), self.commands.len(), self.trailer.len());
-        if debug { println!("{:#?}\n{:#?}", self.color_table, self.commands); }
     }
 
     fn read_command(&self, reader: &mut R) -> Result<Command> {
@@ -174,8 +175,8 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
                 Command::FillPath(FillCMD { fill, coll })
             }
             4 => Command::DrawLines(self.read_drawcmd(skind, reader, Self::read_line)?),
-            5 => Command::DrawLoop (self.read_drawcmd(skind, reader, Self::read_point)?),
-            6 => Command::DrawStrip(self.read_drawcmd(skind, reader, Self::read_point)?),
+            5 => Command::DrawLoop (self.read_drawcmd(skind, reader, Self::read_point)?, false),
+            6 => Command::DrawLoop (self.read_drawcmd(skind, reader, Self::read_point)?, true),
 
             7 => {  let count = reader.read_var_uint()? + 1;
                 let line= self.read_style(skind, reader)?;
@@ -243,27 +244,25 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
                 Some(self.read_unit(reader)?) } else { None };
 
             let instr = match val & 0x07 {
-                0 => SegmentInstruction::Line { end: self.read_point(reader)? },
-                1 => SegmentInstruction::HLine {  x: self.read_unit (reader)? },
-                2 => SegmentInstruction::VLine {  y: self.read_unit (reader)? },
-                3 => SegmentInstruction::CubicBezier { control: (self.read_point(reader)?,
+                0 => SegInstr::Line  { end: self.read_point(reader)? },
+                1 => SegInstr::HLine {   x: self.read_unit (reader)? },
+                2 => SegInstr::VLine {   y: self.read_unit (reader)? },
+                3 => SegInstr::CubicBezier { ctrl: (self.read_point(reader)?,
                         self.read_point(reader)?), end: self.read_point(reader)? },
 
-                4 => {  let val = reader.read_u8()?;
-                    SegmentInstruction::ArcCircle {
+                4 => {  let val = reader.read_u8()?;    SegInstr::ArcCircle {
                         large: 0 < val & 0x01, sweep: 0 < val & 0x02,
-                        radius:   self.read_unit(reader)?, target: self.read_point(reader)? }
-                }
-                5 => {  let val = reader.read_u8()?;
-                    SegmentInstruction::ArcEllipse {
+                        radius:   self.read_unit(reader)?, target: self.read_point(reader)?
+                }}
+                5 => {  let val = reader.read_u8()?;    SegInstr::ArcEllipse {
                         large: 0 < val & 0x01, sweep: 0 < val & 0x02,
                         radius:  (self.read_unit(reader)?, self.read_unit(reader)?),
-                        rotation: self.read_unit(reader)?, target: self.read_point(reader)? }
-                }
+                        rotation: self.read_unit(reader)?, target: self.read_point(reader)?
+                }}
 
-                6 => SegmentInstruction::ClosePath,
-                7 => SegmentInstruction::QuadraticBezier {
-                        control: self.read_point(reader)?, end: self.read_point(reader)? },
+                6 => SegInstr::ClosePath,
+                7 => SegInstr::QuadBezier {
+                        ctrl: self.read_point(reader)?, end: self.read_point(reader)? },
                 x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
                         msg: "illegal path segment instruction" })
             };  cmds.push(SegmentCommand { instr, lwidth, });
@@ -275,11 +274,11 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
             0 =>   Style::FlatColor(reader.read_var_uint()?),
             1 => { Style::LinearGradient {
                     points: (self.read_point(reader)?, self.read_point(reader)?),
-                    color_index: (reader.read_var_uint()?, reader.read_var_uint()?),
+                    cindex: (reader.read_var_uint()?, reader.read_var_uint()?),
             }}
             2 => { Style::RadialGradient {
                     points: (self.read_point(reader)?, self.read_point(reader)?),
-                    color_index: (reader.read_var_uint()?, reader.read_var_uint()?),
+                    cindex: (reader.read_var_uint()?, reader.read_var_uint()?),
             }}
             x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
                     msg: "unsupported primary style" })
@@ -291,8 +290,9 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
     }
 
     #[inline] fn read_rect(&self, reader: &mut R) -> Result<Rect> {
-        Ok(Rect { x: self.read_unit(reader)?, y: self.read_unit(reader)?,
-                  w: self.read_unit(reader)?, h: self.read_unit(reader)? })
+        let (x, y, w, h) = (self.read_unit(reader)?,
+            self.read_unit(reader)?, self.read_unit(reader)?, self.read_unit(reader)?);
+        Ok(Rect { l: x, t: y, r: x + w, b: y + h }) // align to skia::Rect, easy for rendering
     }
 
     #[inline] fn read_point(&self, reader: &mut R) -> Result<Point> {
@@ -331,28 +331,24 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
 
         writer.write_var_uint(self.color_table.len() as u32)?;
         match self.header.color_encoding {  //ColorEncoding::Custom => (),
-            ColorEncoding::RGBA8888 =>
-                self.color_table.iter().try_for_each(|color| -> Result<()> {
+            ColorEncoding::RGBA8888 => for color in &self.color_table {
                     writer.write_u8(color.r)?; writer.write_u8(color.g)?;
-                    writer.write_u8(color.b)?; writer.write_u8(color.a)?;   Ok(())
-                })?,
-            ColorEncoding::RGB565 =>
-                self.color_table.iter().try_for_each(|color| -> Result<()> {
+                    writer.write_u8(color.b)?; writer.write_u8(color.a)?;
+            },
+            ColorEncoding::RGB565 => for color in &self.color_table {
                     writer.write_u16_le((color.r as u16  >> 3) |
-                        ((color.g as u16) << 3) | ((color.b as u16) << 8))?;    Ok(())
-                })?,
-            ColorEncoding::RGBAf32 =>
-                self.color_table.iter().try_for_each(|color| -> Result<()> {
+                        ((color.g as u16) << 3) | ((color.b as u16) << 8))?;
+            },
+            ColorEncoding::RGBAf32 => for color in &self.color_table {
                     writer.write_f32_le(color.r as f32 / 255.0)?;
                     writer.write_f32_le(color.g as f32 / 255.0)?;
                     writer.write_f32_le(color.b as f32 / 255.0)?;
-                    writer.write_f32_le(color.a as f32 / 255.0)?;    Ok(())
-                })?,
+                    writer.write_f32_le(color.a as f32 / 255.0)?;
+            },
         }
 
-        self.commands.iter().try_for_each(|cmd| -> Result<()> {
-            self.write_command(cmd, writer)
-        })?;    writer.write_u8(0)?;    // Command::EndOfDocument
+        self.commands.iter().try_for_each(|cmd| self.write_command(cmd, writer))?;
+        writer.write_u8(0)?;    // Command::EndOfDocument
 
         Ok(writer.write_all(&self.trailer)?)
     }
@@ -373,10 +369,9 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
 
             Command::DrawLines(cmd) =>
                 self.write_drawcmd(4, cmd, writer, Self::write_line),
-            Command::DrawLoop(cmd) =>
-                self.write_drawcmd(5, cmd, writer, Self::write_point),
-            Command::DrawStrip(cmd) =>
-                self.write_drawcmd(6, cmd, writer, Self::write_point),
+            Command::DrawLoop (cmd, strip) => if *strip {
+                self.write_drawcmd(6, cmd, writer, Self::write_point) } else {
+                self.write_drawcmd(5, cmd, writer, Self::write_point) },
 
             Command::DrawPath(cmd) => {
                 writer.write_u8((cmd.line.to_u8() << 6) | 7)?;
@@ -407,7 +402,7 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         writer.write_u8((cmd.fill.to_u8() << 6) | idx)?;
         writer.write_var_uint(cmd.coll.len() as u32 - 1)?;
         self.write_style(&cmd.fill, writer)?;
-        cmd.coll.iter().try_for_each(|elem| -> Result<()> { write_fn(self, elem, writer) })
+        cmd.coll.iter().try_for_each(|elem| write_fn(self, elem, writer))
     }
 
     fn write_drawcmd<T>(&self, idx: u8, cmd: &DrawCMD<T>, writer: &mut W,
@@ -415,7 +410,7 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         writer.write_u8((cmd.line.to_u8() << 6) | idx)?;
         writer.write_var_uint(cmd.coll.len() as u32 - 1)?;
         self.write_style(&cmd.line, writer)?;   self.write_unit(cmd.lwidth, writer)?;
-        cmd.coll.iter().try_for_each(|elem| -> Result<()> { write_fn(self, elem, writer) })
+        cmd.coll.iter().try_for_each(|elem| write_fn(self, elem, writer))
     }
 
     fn write_outline<T>(&self, idx: u8, cmd: &OutlineCMD<T>, writer: &mut W,
@@ -426,20 +421,17 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         writer.write_u8((cmd.line.to_u8() << 6) | (cmd.coll.len() as u8 - 1))?;
         self.write_style(&cmd.fill, writer)?;   self.write_style(&cmd.line, writer)?;
         self.write_unit(cmd.lwidth, writer)?;
-        cmd.coll.iter().try_for_each(|elem| -> Result<()> { write_fn(self, elem, writer) })
+        cmd.coll.iter().try_for_each(|elem| write_fn(self, elem, writer))
     }
 
     fn write_path(&self, coll: &Vec<Segment>, writer: &mut W) -> Result<()> {
-        coll.iter().try_for_each(|seg| -> Result<()> {
-            Ok(writer.write_var_uint(seg.cmds.len() as u32 - 1)?)
-        })?;
-
+        for seg in coll { writer.write_var_uint(seg.cmds.len() as u32 - 1)? }
         coll.iter().try_for_each(|seg| self.write_segment(seg, writer))
     }
 
     fn write_segment(&self, seg: &Segment, writer: &mut W) -> Result<()> {
         self.write_point(&seg.start, writer)?;
-        seg.cmds.iter().try_for_each(|cmd| -> Result<()> {
+        seg.cmds.iter().try_for_each(|cmd| {
             let mut write_tag = |idx| {
                 if let Some(val) = cmd.lwidth {
                     writer.write_u8(idx | 0x10)?;   self.write_unit(val, writer)
@@ -447,35 +439,31 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
             };
 
             match &cmd.instr {
-                SegmentInstruction::Line { end } => {   write_tag(0)?;
-                    self.write_point(end, writer) }
-                SegmentInstruction::HLine { x } => {    write_tag(1)?;
-                    self.write_unit(*x, writer) }
-                SegmentInstruction::VLine { y } => {    write_tag(2)?;
-                    self.write_unit(*y, writer) }
-                SegmentInstruction::CubicBezier {
-                    control, end } => {  write_tag(3)?;
-                    self.write_point(&control.0, writer)?;
-                    self.write_point(&control.1, writer)?;
+                SegInstr::Line { end } => { write_tag(0)?; self.write_point(end, writer) }
+                SegInstr::HLine { x } => {    write_tag(1)?; self.write_unit(*x, writer) }
+                SegInstr::VLine { y } => {    write_tag(2)?; self.write_unit(*y, writer) }
+                SegInstr::CubicBezier {
+                    ctrl, end } => {  write_tag(3)?;
+                    self.write_point(&ctrl.0, writer)?;
+                    self.write_point(&ctrl.1, writer)?;
                     self.write_point(end, writer)
                 }
-                SegmentInstruction::ArcCircle { large, sweep,
+                SegInstr::ArcCircle { large, sweep,
                     radius, target } => {   write_tag(4)?;
                     let mut val = 0u8;  if *large { val |= 0x01; }
                     if *sweep { val |= 0x02; }  writer.write_u8(val)?;
                     self.write_unit(*radius, writer)?;      self.write_point(target, writer)
                 }
-                SegmentInstruction::ArcEllipse { large, sweep, radius,
+                SegInstr::ArcEllipse { large, sweep, radius,
                     rotation, target } => {     write_tag(5)?;
                     let mut val = 0u8;  if *large { val |= 0x01; }
                     if *sweep { val |= 0x02; }  writer.write_u8(val)?;
                     self.write_unit(radius.0, writer)?;     self.write_unit(radius.1, writer)?;
                     self.write_unit(*rotation, writer)?;    self.write_point(target, writer)
                 }
-                SegmentInstruction::ClosePath => write_tag(6),
-                SegmentInstruction::QuadraticBezier {
-                    control, end } => {  write_tag(7)?;
-                    self.write_point(control, writer)?;     self.write_point(end, writer)
+                SegInstr::ClosePath => write_tag(6),
+                SegInstr::QuadBezier { ctrl, end } => {  write_tag(7)?;
+                    self.write_point(ctrl, writer)?;     self.write_point(end, writer)
                 }
             }
         })
@@ -483,24 +471,24 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
 
     fn write_style(&self, style: &Style, writer: &mut W) -> Result<()> {
         let mut write_gradient =
-            |points: &(Point, Point), color_index: &(VarUInt, VarUInt)| {
-            if !(color_index.0 < self.color_table.len() as u32) ||
-               !(color_index.1 < self.color_table.len() as u32) { return Err(TVGError {
+            |points: &(Point, Point), cindex: &(VarUInt, VarUInt)| {
+            if !(cindex.0 < self.color_table.len() as u32) ||
+               !(cindex.1 < self.color_table.len() as u32) { return Err(TVGError {
                 kind: ErrorKind::OutOfRange, msg: "invalid color index" }) }
             self.write_point(&points.0, writer)?;   self.write_point(&points.1, writer)?;
-            writer.write_var_uint(color_index.0)?;  Ok(writer.write_var_uint(color_index.1)?)
+            writer.write_var_uint(cindex.0)?;  Ok(writer.write_var_uint(cindex.1)?)
         };
 
         match style {
-            Style::FlatColor(color_index) => {
-                if !(*color_index < self.color_table.len() as u32) { return Err(TVGError {
+            Style::FlatColor(idx) => {
+                if !(*idx < self.color_table.len() as u32) { return Err(TVGError {
                     kind: ErrorKind::OutOfRange, msg: "invalid color index" }) }
-                Ok(writer.write_var_uint(*color_index)?)
+                Ok(writer.write_var_uint(*idx)?)
             }
-            Style::LinearGradient { points, color_index } =>
-                write_gradient(points, color_index),
-            Style::RadialGradient { points, color_index } =>
-                write_gradient(points, color_index),
+            Style::LinearGradient { points, cindex } =>
+                write_gradient(points, cindex),
+            Style::RadialGradient { points, cindex } =>
+                write_gradient(points, cindex),
         }
     }
 
@@ -509,8 +497,9 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
     }
 
     fn write_rect(&self, rect: &Rect, writer: &mut W) -> Result<()> {
-        self.write_unit(rect.x, writer)?;  self.write_unit(rect.y, writer)?;
-        self.write_unit(rect.w, writer)?;  self.write_unit(rect.h, writer)
+        self.write_unit(rect.l, writer)?;  self.write_unit(rect.t, writer)?;
+        self.write_unit(rect.r - rect.l, writer)?;
+        self.write_unit(rect.b - rect.t, writer)
     }
 
     fn write_point(&self, point: &Point, writer: &mut W) -> Result<()> {
@@ -532,14 +521,14 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
 const TVG_MAGIC: u16  = 0x5672; // [0x72, 0x56];
 const TVG_VERSION: u8 = 1;
 
-#[derive(Debug)] struct Header {
+#[derive(Debug)] pub struct Header {
     //magic: u16,     // Must be [0x72, 0x56], 0x5672
     //version: u8,    // Must be 1. This field might decide how the rest of the format looks like.
 
-    scale: u8,      // u4, Defines the number of fraction bits in a _Unit_ value.
+    pub scale: u8,  // u4, Defines the number of fraction bits in a _Unit_ value.
 
     // u2, Defines the type of color information that is used in the _color table_.
-    color_encoding: ColorEncoding,
+    pub color_encoding: ColorEncoding,
 
     // u2, Defines the number of total bits in a _Unit_ value
     // and thus the overall precision of the file.
@@ -548,7 +537,7 @@ const TVG_VERSION: u8 = 1;
     // Encodes the maximum width/height of the output file in _display units_.
     // A value of 0 indicates that the image has the maximum possible width.
     // The size of these two fields depends on the coordinate range field.
-    width: u32, height: u32,    // u8, u16 or u32
+    pub width: u32, pub height: u32,    // u8, u16 or u32
 
     //color_count: VarUInt,   // The number of colors in the _color table_.
 }
@@ -576,10 +565,10 @@ const TVG_VERSION: u8 = 1;
 //  range of a 32 bits value. This means we only have 5 bits overhead in the
 //  worst case, but for all smaller values, we reduce the number of bytes
 //  for encoding unsigned integers.
-//#[derive(Clone, Copy, Debug)] struct VarUInt(u32);
+//#[derive(Clone, Copy)] struct VarUInt(u32);
 type VarUInt = u32;
 
-//#[derive(Clone, Copy, Debug)] struct Unit(f32);
+//#[derive(Clone, Copy)] struct Unit(f32);
 type Unit = f32;
 
 trait TVGRead: io::Read  {
@@ -648,13 +637,14 @@ impl<R: io::Read>  TVGRead  for R {}
 #[derive(Debug, Clone, Copy)] enum CoordinateRange { Default = 0, Reduced = 1, Enhanced = 2, }
 // Each Unit takes up 16/8/32 bits
 
-#[derive(Debug, Clone, Copy)]
-enum ColorEncoding { RGBA8888 = 0, RGB565 = 1, RGBAf32 = 2, /*Custom = 3, */}
+#[derive(Debug, Clone, Copy)] pub enum ColorEncoding { RGBA8888 = 0, RGB565 = 1, RGBAf32 = 2, }
 
-//struct RGB565(u16);     // sRGB color space
-#[derive(Debug)] struct RGBA8888 { r:  u8, g:  u8, b:  u8, a:  u8 }  //  sRGB color space
+//#[derive(Clone, Copy)] struct RGB565(u16);     // sRGB color space
+#[derive(Clone, Copy)] pub struct RGBA8888 {
+    pub r:  u8, pub g:  u8, pub b:  u8, pub a:  u8 }  //  sRGB color space
 //struct RGBAf32  { r: f32, g: f32, b: f32, a: f32 }  // scRGB color space
 // color channel between 0 and 100% intensity, mapped to value range
+//use tiny_skia::{ColorU8, Color};    // XXX: tiny_skia_path
 
 //  Commands:
 //  TinyVG files contain a sequence of draw commands that must be executed
@@ -667,20 +657,24 @@ enum ColorEncoding { RGBA8888 = 0, RGB565 = 1, RGBAf32 = 2, /*Custom = 3, */}
 //  command_index     u6     The command that is encoded next. See table above.
 //  prim_style_kind   u2     The type of style this command uses as a primary style.
 
-#[derive(Debug)] struct FillCMD<T> { fill: Style, coll: Vec<T> }
-#[derive(Debug)] struct OutlineCMD<T> { fill: Style, line: Style, lwidth: Unit, coll: Vec<T> }
-#[derive(Debug)] struct DrawCMD<T> { line: Style, lwidth: Unit, coll: Vec<T> }
+pub struct FillCMD<T> { pub fill: Style, pub coll: Vec<T> }
+pub struct OutlineCMD<T> {     // line -> stroke
+       pub fill: Style, pub line: Style, pub lwidth: Unit, pub coll: Vec<T> }
+pub struct DrawCMD<T> { pub line: Style, pub lwidth: Unit, pub coll: Vec<T> }
+//  Each line is line_width units wide, and at least a single display pixel.
+//  This means that line_width of 0 is still visible, even though only marginally.
 
-#[derive(Debug)] enum Command {  EndOfDocument,
+pub enum Command { EndOfDocument,
     FillPolyg(FillCMD<Point>), FillRects(FillCMD<Rect>), FillPath(FillCMD<Segment>),
-    DrawLines(DrawCMD<Line>),  DrawLoop(DrawCMD<Point>),
-    DrawStrip(DrawCMD<Point>), DrawPath(DrawCMD<Segment>), OutlinePolyg(OutlineCMD<Point>),
-    OutlineRects(OutlineCMD<Rect>), OutlinePath(OutlineCMD<Segment>),
+    DrawLines(DrawCMD<Line>),  DrawLoop (DrawCMD<Point>, bool), //DrawStrip(DrawCMD<Point>),
+    DrawPath(DrawCMD<Segment>),     OutlinePolyg(OutlineCMD<Point>),
+    OutlineRects(OutlineCMD<Rect>), OutlinePath (OutlineCMD<Segment>),
 }
 
-#[derive(Debug)] enum Style {   FlatColor(VarUInt),     // color_index in the color_table
-    LinearGradient { points: (Point, Point), color_index: (VarUInt, VarUInt), },
-    RadialGradient { points: (Point, Point), color_index: (VarUInt, VarUInt), },
+pub enum Style { FlatColor(VarUInt),   // color_index in the color_table
+    LinearGradient { points: (Point, Point), cindex: (VarUInt, VarUInt), },
+    RadialGradient { points: (Point, Point), cindex: (VarUInt, VarUInt), },
+    // XXX: why not { start: Point, radius: Unit, cindex: (VarUInt, VarUInt), },
 }
 
 impl Style {
@@ -689,9 +683,7 @@ impl Style {
     }
 }
 
-#[derive(Debug)] struct Rect { x: Unit, y: Unit, w: Unit, h: Unit, }
-
-#[derive(Debug)] struct Line { start: Point, end: Point, }
+pub struct Line { pub start: Point, pub end: Point, }
 
 //  Point:
 //  Points are a X and Y coordinate pair:
@@ -709,7 +701,10 @@ impl Style {
 //  divided into the final value. For example, with a _reduced_ value of
 //  0x13 and a scale of 4, we get the final value of 1.1875, as the number
 //  is interpretet as binary b0001.0011.
-#[derive(Debug)] struct Point { x: Unit, y: Unit }
+#[derive(Clone, Copy)] pub struct Point { pub x: Unit, pub y: Unit }
+#[derive(Clone, Copy)] pub struct Rect  {
+    pub l: Unit, pub t: Unit, pub r: Unit, pub b: Unit }
+//use tiny_skia::{Rect, Point};   // XXX: tiny_skia_path
 
 //  Paths describe instructions to create complex 2D graphics.
 //
@@ -738,16 +733,16 @@ impl Style {
 //
 //      5.  The data for this command is decoded.
 
-#[derive(Debug)] struct Segment { start: Point, cmds: Vec<SegmentCommand>, }
+pub struct Segment { pub start: Point, pub cmds: Vec<SegmentCommand>, }
 
-#[derive(Debug)] struct SegmentCommand { instr: SegmentInstruction, lwidth: Option<Unit>, }
+pub struct SegmentCommand { pub instr: SegInstr, pub lwidth: Option<Unit>, }
 
-#[derive(Debug)] enum SegmentInstruction {
+pub enum SegInstr { //Move { start: Point },
     Line { end: Point, }, HLine { x: Unit, }, VLine { y: Unit, },
-    CubicBezier { control: (Point, Point), end: Point, },
+    CubicBezier { ctrl: (Point, Point), end: Point, },
     ArcCircle  { large: bool, sweep: bool, radius:  Unit, target: Point, },
     ArcEllipse { large: bool, sweep: bool, radius: (Unit, Unit), rotation: Unit, target: Point, },
-    QuadraticBezier { control: Point, end: Point, },    ClosePath,
+    QuadBezier { ctrl: Point, end: Point, },     ClosePath,
 }
 
 //}
