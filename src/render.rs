@@ -72,8 +72,8 @@ impl Render for TVGImage {
                         stroke_segment_path(seg, &mut pixmap, &paint, &mut stroke)?;
                     }
                 }
-                Command::OutlinePolyg(OutlineCMD {
-                    fill, line, lwidth, coll }) => {
+                Command::OutlinePolyg(fill, DrawCMD {
+                    line, lwidth, coll }) => {
                     let mut iter = coll.iter();
                     let mut pb = skia::PathBuilder::new();
                     iter.next().map(|point| pb.move_to(point.x, point.y));
@@ -87,8 +87,8 @@ impl Render for TVGImage {
                     stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
                     pixmap.stroke_path(&path, &style_to_paint(self, line)?, &stroke, ts, None);
                 }
-                Command::OutlineRects(OutlineCMD {
-                    fill, line, lwidth, coll }) => {
+                Command::OutlineRects(fill, DrawCMD {
+                    line, lwidth, coll }) => {
                     let paint = style_to_paint(self, fill)?;
                     let pline = style_to_paint(self, line)?;
                     let mut stroke = skia::Stroke::default();
@@ -100,8 +100,8 @@ impl Render for TVGImage {
                         pixmap.stroke_path(&path, &pline, &stroke, ts, None);
                     });
                 }
-                Command::OutlinePath (OutlineCMD {
-                    fill, line, lwidth, coll }) => {
+                Command::OutlinePath (fill, DrawCMD {
+                    line, lwidth, coll }) => {
                     let paint = style_to_paint(self, fill)?;
                     let pline = style_to_paint(self, line)?;
                     let mut stroke = skia::Stroke::default();

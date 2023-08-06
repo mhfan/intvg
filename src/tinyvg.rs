@@ -184,15 +184,19 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
                 let coll = self.read_path(count as usize, reader)?;
                 Command::DrawPath(DrawCMD { line, lwidth, coll })
             }
-            8 => Command::OutlinePolyg(self.read_outline(skind, reader, Self::read_point)?),
-            9 => Command::OutlineRects(self.read_outline(skind, reader, Self::read_rect)?),
+            8 => {  let res = self.read_outline(skind, reader,
+                Self::read_point)?;     Command::OutlinePolyg(res.0, res.1)
+            }
+            9 => {  let res = self.read_outline(skind, reader,
+                Self::read_rect)?;      Command::OutlineRects(res.0, res.1)
+            }
 
            10 => {  let val = reader.read_u8()?;
                 let fill= self.read_style(skind, reader)?;
                 let line= self.read_style(val >> 6, reader)?;
                 let lwidth = self.read_unit(reader)?;
                 let coll = self.read_path((val & 0x3F) as usize + 1, reader)?;
-                Command::OutlinePath(OutlineCMD { fill, line, lwidth, coll })
+                Command::OutlinePath(fill, DrawCMD { line, lwidth, coll })
             }
             x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
                     msg: "unrecognized command tag" })
@@ -219,13 +223,13 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
     }
 
     fn read_outline<T>(&self, fill_kind: u8, reader: &mut R,
-        read_fn: impl Fn(&Self, &mut R) -> Result<T>) -> Result<OutlineCMD<T>> {
+        read_fn: impl Fn(&Self, &mut R) -> Result<T>) -> Result<(Style, DrawCMD<T>)> {
         let (mut coll, val) = (vec![], reader.read_u8()?);
         let fill = self.read_style(fill_kind, reader)?;
-        let line = self.read_style(val >> 6, reader)?;
+        let line = self.read_style(val  >> 6, reader)?;
         let lwidth = self.read_unit(reader)?;
         for _ in 0..((val & 0x3F) + 1) { coll.push(read_fn(self, reader)?); }
-        Ok(OutlineCMD { fill, line, lwidth, coll })
+        Ok((fill, DrawCMD { line, lwidth, coll }))
     }
 
     fn read_path(&self, count: usize, reader: &mut R) -> Result<Vec<Segment>> {
@@ -381,17 +385,17 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
                 self.write_path (&cmd.coll, writer)
             }
 
-            Command::OutlinePolyg(cmd) =>
-                self.write_outline(8, cmd, writer, Self::write_point),
-            Command::OutlineRects(cmd) =>
-                self.write_outline(9, cmd, writer, Self::write_rect),
+            Command::OutlinePolyg(fill, cmd) =>
+                self.write_outline(8, fill, cmd, writer, Self::write_point),
+            Command::OutlineRects(fill, cmd) =>
+                self.write_outline(9, fill, cmd, writer, Self::write_rect),
 
-            Command::OutlinePath(cmd) => {
-                writer.write_u8((cmd.fill.to_u8() << 6) | 7)?;
+            Command::OutlinePath (fill, cmd) => {
+                writer.write_u8( (fill.to_u8() << 6) | 7)?;
                 if !(cmd.coll.len() < ((1 << 6) + 1)) { return Err(TVGError {
                     kind: ErrorKind::OutOfRange, msg: "outline segment" }) }
                 writer.write_u8((cmd.line.to_u8() << 6) | (cmd.coll.len() as u8 - 1))?;
-                self.write_style(&cmd.fill, writer)?;   self.write_style(&cmd.line, writer)?;
+                self.write_style( fill, writer)?;       self.write_style(&cmd.line, writer)?;
                 self.write_unit(cmd.lwidth, writer)?;   self.write_path (&cmd.coll, writer)
             }
         }
@@ -413,13 +417,13 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         cmd.coll.iter().try_for_each(|elem| write_fn(self, elem, writer))
     }
 
-    fn write_outline<T>(&self, idx: u8, cmd: &OutlineCMD<T>, writer: &mut W,
+    fn write_outline<T>(&self, idx: u8, fill: &Style, cmd: &DrawCMD<T>, writer: &mut W,
         write_fn: impl Fn(&Self, &T, &mut W) -> Result<()>) -> Result<()> {
-        writer.write_u8((cmd.fill.to_u8() << 6) | idx)?;
+        writer.write_u8((fill.to_u8() << 6) | idx)?;
         if !(cmd.coll.len() < ((1 << 6) + 1)) { return Err(TVGError {
             kind: ErrorKind::OutOfRange, msg: "outline segment" }) }
         writer.write_u8((cmd.line.to_u8() << 6) | (cmd.coll.len() as u8 - 1))?;
-        self.write_style(&cmd.fill, writer)?;   self.write_style(&cmd.line, writer)?;
+        self.write_style(fill, writer)?;        self.write_style(&cmd.line, writer)?;
         self.write_unit(cmd.lwidth, writer)?;
         cmd.coll.iter().try_for_each(|elem| write_fn(self, elem, writer))
     }
@@ -657,9 +661,7 @@ impl<R: io::Read>  TVGRead  for R {}
 //  command_index     u6     The command that is encoded next. See table above.
 //  prim_style_kind   u2     The type of style this command uses as a primary style.
 
-pub struct FillCMD<T> { pub fill: Style, pub coll: Vec<T> }
-pub struct OutlineCMD<T> {     // line -> stroke
-       pub fill: Style, pub line: Style, pub lwidth: Unit, pub coll: Vec<T> }
+pub struct FillCMD<T> { pub fill: Style, pub coll: Vec<T> }     // line -> stroke
 pub struct DrawCMD<T> { pub line: Style, pub lwidth: Unit, pub coll: Vec<T> }
 //  Each line is line_width units wide, and at least a single display pixel.
 //  This means that line_width of 0 is still visible, even though only marginally.
@@ -667,8 +669,8 @@ pub struct DrawCMD<T> { pub line: Style, pub lwidth: Unit, pub coll: Vec<T> }
 pub enum Command { EndOfDocument,
     FillPolyg(FillCMD<Point>), FillRects(FillCMD<Rect>), FillPath(FillCMD<Segment>),
     DrawLines(DrawCMD<Line>),  DrawLoop (DrawCMD<Point>, bool), //DrawStrip(DrawCMD<Point>),
-    DrawPath(DrawCMD<Segment>),     OutlinePolyg(OutlineCMD<Point>),
-    OutlineRects(OutlineCMD<Rect>), OutlinePath (OutlineCMD<Segment>),
+    DrawPath (DrawCMD<Segment>),        OutlinePolyg(Style, DrawCMD<Point>),
+    OutlineRects(Style, DrawCMD<Rect>), OutlinePath (Style, DrawCMD<Segment>),
 }
 
 pub enum Style { FlatColor(VarUInt),   // color_index in the color_table
