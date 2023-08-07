@@ -7,29 +7,31 @@
     //    ""), Some(1_000))?;     ptys.exp_eof()?;
 
     let mut tvg = TVGImage::new();
-    assert!(tvg.load(&mut BufReader::new(File::open("examples/files/tiger.svg")?))
+    assert!(tvg.load(&mut BufReader::new(File::open("data/tiger.svg")?))
         .is_err_and(|e| { eprintln!("{e}\n{e:?}"); true }));    // coverage TVGError
 
-    use usvg::TreeParsing;
-    let tree = usvg::Tree::from_data(&fs::read("examples/files/tiger.svg")?,
-        &usvg::Options::default())?;
-    let mut tvg = TVGImage::from_usvg(&tree);
-    tvg.save(&mut BufWriter::new(File::create("target/foo.tvg")?))?;
+    for entry in fs::read_dir("data")? {
+        let entry = entry?;
+        if !entry.file_type().is_ok_and(|ft| ft.is_file()) { continue }
+        let path = entry.path();
 
-    tvg.load(&mut BufReader::new(File::open("examples/files/tiger.tvg")?))?;
-    tvg.render(1.0)?.save_png("target/foo.png")?;
-
-    fs::read_dir("examples/files")?
-        .try_for_each(|entry| -> intvg::tinyvg::Result<()> {
-        let entry = entry?;     let path = entry.path();
-        if  entry.file_type().is_ok_and(|ft| ft.is_file()) &&
-            path.extension().is_some_and(|ext| ext == "tvg") {
-            let mut tvg = TVGImage::new();
-            tvg.load(&mut BufReader::new(File::open(&path)?))?;
-            tvg.save(&mut BufWriter::new(File::create("target/foo.tvg")?))?;
-            println!("{}: ", path.display());
-            // XXX: binary compare and reload?
-        }   Ok(())
-    })?;    Ok(())
+        //if  path.as_os_str() != "data/tiger.tvg" { continue }       // to test specific file
+        if let Some(ext) = path.extension() {
+            if ext == "tvg" {   println!("{}: ", path.display());
+                let mut tvg = TVGImage::new();
+                tvg.load(&mut BufReader::new(File::open(&path)?))?;
+                tvg.render(1.0)?.save_png("target/foo.png")?;
+                // XXX: binary compare and reload?
+            } else
+            if ext == "svg" {   println!("{}: ", path.display());
+                use usvg::TreeParsing;
+                let tree = usvg::Tree::from_data(&fs::read(&path)?,
+                    &usvg::Options::default())?;
+                let mut tvg = TVGImage::from_usvg(&tree);
+                tvg.save(&mut BufWriter::new(File::create("target/foo.tvg")?))?;
+                tvg.render(1.0)?.save_png("target/foo.png")?;
+            }
+        }
+    };    Ok(())
 }
 
