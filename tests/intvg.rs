@@ -3,8 +3,12 @@
     use std::{fs::{self, File}, io::{BufReader, BufWriter}};
     use intvg::{tinyvg::TVGImage, render::Render, convert::Convert};
 
+    use usvg::{TreeParsing, TreeTextToPath};
+    let mut fontdb = usvg::fontdb::Database::new();
+    fontdb.load_system_fonts();
+
     //let mut ptys = rexpect::spawn(concat!(env!("CARGO_BIN_EXE_intvg"),
-    //    ""), Some(1_000))?;     ptys.exp_eof()?;
+    //    " data/tiger.svg target/tiger.png"), Some(1_000))?;   ptys.exp_eof()?;
 
     let mut tvg = TVGImage::new();
     assert!(tvg.load(&mut BufReader::new(File::open("data/tiger.svg")?))
@@ -17,20 +21,20 @@
 
         //if  path.as_os_str() != "data/tiger.tvg" { continue }       // to test specific file
         if let Some(ext) = path.extension() {
-            if ext == "tvg" {   println!("{}: ", path.display());
+            let tvg = if ext == "tvg" { println!("{}: ", path.display());
                 let mut tvg = TVGImage::new();
                 tvg.load(&mut BufReader::new(File::open(&path)?))?;
-                tvg.render(1.0)?.save_png("target/foo.png")?;
-                // XXX: binary compare and reload?
-            } else
-            if ext == "svg" {   println!("{}: ", path.display());
-                use usvg::TreeParsing;
-                let tree = usvg::Tree::from_data(&fs::read(&path)?,
+                tvg.save(&mut BufWriter::new(File::create("target/foo.tvg")?))?;    tvg
+            } else  // XXX: binary compare and reload?
+            if ext == "svg" { println!("{}: ", path.display());
+                let mut tree = usvg::Tree::from_data(&fs::read(&path)?,
                     &usvg::Options::default())?;
+                tree.convert_text(&fontdb);
+
                 let mut tvg = TVGImage::from_usvg(&tree);
-                tvg.save(&mut BufWriter::new(File::create("target/foo.tvg")?))?;
-                tvg.render(1.0)?.save_png("target/foo.png")?;
-            }
+                tvg.save(&mut BufWriter::new(File::create("target/foo.tvg")?))?;    tvg
+            } else { continue };
+            tvg.render(1.0)?.save_png("target/foo.png")?;
         }
     };    Ok(())
 }
