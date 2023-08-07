@@ -111,24 +111,20 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         }
 
         let val = reader.read_u8()?;   self.header.scale = val & 0x0F;
+        // TODO: scale rendering by change self.header.scale?
+
         self.header.coordinate_range = match val >> 6 {
-            0 => {  self.header.width  = reader.read_u16_le()? as u32;
-                    self.header.height = reader.read_u16_le()? as u32;
-                self.read_range = Self::read_default;  CoordinateRange::Default
-            }
-            1 => {  self.header.width  = reader.read_u8()? as u32;
-                    self.header.height = reader.read_u8()? as u32;
-                self.read_range = Self::read_reduced;  CoordinateRange::Reduced
-            }
-            2 => {  self.header.width  = reader.read_u32_le()?;
-                    self.header.height = reader.read_u32_le()?;
-                self.read_range = Self::read_enhanced; CoordinateRange::Enhanced
-            }
+            0 => { self.read_range = Self::read_default;  CoordinateRange::Default  }
+            1 => { self.read_range = Self::read_reduced;  CoordinateRange::Reduced  }
+            2 => { self.read_range = Self::read_enhanced; CoordinateRange::Enhanced }
             x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
                 msg: "unsupported color encoding" })
         };
 
+        self.header.width  = (self.read_range)(reader)? as u32;
+        self.header.height = (self.read_range)(reader)? as u32;
         let color_count = reader.read_var_uint()?;
+
         self.color_table.reserve_exact(color_count as usize);
         self.header.color_encoding = match (val >> 4) & 0x03 {  // XXX: unified to RGBA8888
             0 => { for _ in 0..color_count { self.color_table.push(RGBA8888 {
@@ -289,27 +285,31 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         })
     }
 
-    #[inline] fn read_line(&self, reader: &mut R) -> Result<Line> {
+    fn read_line(&self, reader: &mut R) -> Result<Line> {
         Ok(Line { start: self.read_point(reader)?, end: self.read_point(reader)? })
     }
 
-    #[inline] fn read_rect(&self, reader: &mut R) -> Result<Rect> {
+    fn read_rect(&self, reader: &mut R) -> Result<Rect> {
         let (x, y, w, h) = (self.read_unit(reader)?,
             self.read_unit(reader)?, self.read_unit(reader)?, self.read_unit(reader)?);
         Ok(Rect { l: x, t: y, r: x + w, b: y + h }) // align to skia::Rect, easy for rendering
     }
 
-    #[inline] fn read_point(&self, reader: &mut R) -> Result<Point> {
+    fn read_point(&self, reader: &mut R) -> Result<Point> {
         Ok(Point { x: self.read_unit(reader)?, y: self.read_unit(reader)? })
     }
 
     #[inline] fn read_default (reader: &mut R) ->
-        io::Result<i32> { reader.read_i16_le().map(i32::from) }
+        io::Result<i32> { reader.read_u16_le().map(|v| i32::from(v as i16)) }
     #[inline] fn read_reduced (reader: &mut R) ->
-        io::Result<i32> { reader.read_i8().map(i32::from) }
+        io::Result<i32> { reader.read_u8().map(|v| i32::from(v as i8)) }
     #[inline] fn read_enhanced(reader: &mut R) -> io::Result<i32> { reader.read_i32_le() }
 
-    #[inline] fn read_unit(&self, reader: &mut R) -> Result<Unit> {
+    /** ```
+    assert!(i16::MAX as u16 == 0x7fff && i16::MIN as u16 == 0x8000);
+    assert!(0x8000_u16 as i16 == i16::MIN && 0xffff_u16 as i16 == -1);
+    ``` */
+    fn read_unit(&self, reader: &mut R) -> Result<Unit> {
         Ok((self.read_range)(reader)? as f32 / (1u32 << self.header.scale) as f32)
     }
 
@@ -318,22 +318,16 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         writer.write_u8((self.header.coordinate_range as u8) << 6 |
                         (self.header.color_encoding   as u8) << 4 | self.header.scale)?;
 
-        match self.header.coordinate_range {
-            CoordinateRange::Default  => {  self.write_range = Self::write_default;
-                writer.write_u16_le(self.header.width .try_into()?)?;
-                writer.write_u16_le(self.header.height.try_into()?)?;
-            }
-            CoordinateRange::Reduced  => {  self.write_range = Self::write_reduced;
-                writer.write_u8(self.header.width .try_into()?)?;
-                writer.write_u8(self.header.height.try_into()?)?;
-            }
-            CoordinateRange::Enhanced => {  self.write_range = Self::write_enhanced;
-                writer.write_u32_le(self.header.width)?;
-                writer.write_u32_le(self.header.height)?;
-            }
-        }
+        self.write_range = match self.header.coordinate_range {
+            CoordinateRange::Default  => Self::write_default,
+            CoordinateRange::Reduced  => Self::write_reduced,
+            CoordinateRange::Enhanced => Self::write_enhanced,
+        };
 
+        (self.write_range)(writer, self.header.width  as i32)?;
+        (self.write_range)(writer, self.header.height as i32)?;
         writer.write_var_uint(self.color_table.len() as u32)?;
+
         match self.header.color_encoding {  //ColorEncoding::Custom => (),
             ColorEncoding::RGBA8888 => for color in &self.color_table {
                     writer.write_u8(color.r)?; writer.write_u8(color.g)?;
@@ -511,14 +505,14 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
     }
 
     #[inline] fn write_default (writer: &mut W, val: i32) ->
-        Result<()> { Ok(writer.write_i16_le(val.try_into()?)?) }
+        Result<()> { Ok(writer.write_u16_le(i16::try_from(val)? as u16)?) }
     #[inline] fn write_reduced (writer: &mut W, val: i32) ->
-        Result<()> { Ok(writer.write_i8(val.try_into()?)?) }
+        Result<()> { Ok(writer.write_u8(i8::try_from(val)? as u8)?) }
     #[inline] fn write_enhanced(writer: &mut W, val: i32) ->
         Result<()> { Ok(writer.write_i32_le(val)?) }
 
     fn write_unit(&self, val: Unit, writer: &mut W)-> Result<()> {
-        Ok((self.write_range)(writer, (val * (1u32 << self.header.scale) as f32) as i32)?)
+        Ok((self.write_range)(writer, (val * (1u32 << self.header.scale) as f32 + 0.5) as i32)?)
     }
 }
 
@@ -536,7 +530,7 @@ const TVG_VERSION: u8 = 1;
 
     // u2, Defines the number of total bits in a _Unit_ value
     // and thus the overall precision of the file.
-    coordinate_range: CoordinateRange,
+    pub coordinate_range: CoordinateRange,
 
     // Encodes the maximum width/height of the output file in _display units_.
     // A value of 0 indicates that the image has the maximum possible width.
@@ -573,7 +567,7 @@ const TVG_VERSION: u8 = 1;
 type VarUInt = u32;
 
 //#[derive(Clone, Copy)] struct Unit(f32);
-type Unit = f32;
+type Unit = f32;    // Each Unit takes up 16/8/32 bits
 
 trait TVGRead: io::Read  {
     /*#[inline] fn read_value<T>(&mut self) -> io::Result<T> {
@@ -583,14 +577,8 @@ trait TVGRead: io::Read  {
 
     #[inline] fn read_u8(&mut self) -> io::Result<u8> {
         let mut buf = [0; 1]; self.read_exact(&mut buf)?; Ok(buf[0]) }
-    #[inline] fn read_i8(&mut self) -> io::Result<i8> {
-        let mut buf = [0; 1]; self.read_exact(&mut buf)?; Ok(buf[0] as i8) }
     #[inline] fn read_u16_le(&mut self) -> io::Result<u16> {
         let mut buf = [0; 2]; self.read_exact(&mut buf)?; Ok(u16::from_le_bytes(buf)) }
-    #[inline] fn read_i16_le(&mut self) -> io::Result<i16> {
-        let mut buf = [0; 2]; self.read_exact(&mut buf)?; Ok(i16::from_le_bytes(buf)) }
-    #[inline] fn read_u32_le(&mut self) -> io::Result<u32> {
-        let mut buf = [0; 4]; self.read_exact(&mut buf)?; Ok(u32::from_le_bytes(buf)) }
     #[inline] fn read_i32_le(&mut self) -> io::Result<i32> {
         let mut buf = [0; 4]; self.read_exact(&mut buf)?; Ok(i32::from_le_bytes(buf)) }
     #[inline] fn read_f32_le(&mut self) -> io::Result<f32> {    // read_f32::<LE>()
@@ -614,12 +602,7 @@ trait TVGWrite: io::Write {
     }*/
 
     #[inline] fn write_u8(&mut self, n: u8) -> io::Result<()> { self.write_all(&[n]) }
-    #[inline] fn write_i8(&mut self, n: i8) -> io::Result<()> { self.write_all(&[n as u8]) }
     #[inline] fn write_u16_le(&mut self, n: u16) ->     // write_u16::<LE>(n)
-        io::Result<()> { self.write_all(&n.to_le_bytes()) }
-    #[inline] fn write_i16_le(&mut self, n: i16) ->
-        io::Result<()> { self.write_all(&n.to_le_bytes()) }
-    #[inline] fn write_u32_le(&mut self, n: u32) ->
         io::Result<()> { self.write_all(&n.to_le_bytes()) }
     #[inline] fn write_i32_le(&mut self, n: i32) ->
         io::Result<()> { self.write_all(&n.to_le_bytes()) }
@@ -638,14 +621,11 @@ trait TVGWrite: io::Write {
 impl<W: io::Write> TVGWrite for W {}
 impl<R: io::Read>  TVGRead  for R {}
 
-#[derive(Debug, Clone, Copy)] enum CoordinateRange { Default = 0, Reduced = 1, Enhanced = 2, }
-// Each Unit takes up 16/8/32 bits
-
+#[derive(Debug, Clone, Copy)] pub enum CoordinateRange { Default = 0, Reduced = 1, Enhanced = 2 }
 #[derive(Debug, Clone, Copy)] pub enum ColorEncoding { RGBA8888 = 0, RGB565 = 1, RGBAf32 = 2, }
 
 //#[derive(Clone, Copy)] struct RGB565(u16);     // sRGB color space
-#[derive(Clone, Copy)] pub struct RGBA8888 {
-    pub r:  u8, pub g:  u8, pub b:  u8, pub a:  u8 }  //  sRGB color space
+#[derive(Clone, Copy)] pub struct RGBA8888 { pub r:  u8, pub g:  u8, pub b:  u8, pub a:  u8 }
 //struct RGBAf32  { r: f32, g: f32, b: f32, a: f32 }  // scRGB color space
 // color channel between 0 and 100% intensity, mapped to value range
 //use tiny_skia::{ColorU8, Color};    // XXX: tiny_skia_path
@@ -704,8 +684,7 @@ pub struct Line { pub start: Point, pub end: Point, }
 //  0x13 and a scale of 4, we get the final value of 1.1875, as the number
 //  is interpretet as binary b0001.0011.
 #[derive(Clone, Copy)] pub struct Point { pub x: Unit, pub y: Unit }
-#[derive(Clone, Copy)] pub struct Rect  {
-    pub l: Unit, pub t: Unit, pub r: Unit, pub b: Unit }
+#[derive(Clone, Copy)] pub struct Rect  { pub l: Unit, pub t: Unit, pub r: Unit, pub b: Unit }
 //use tiny_skia::{Rect, Point};   // XXX: tiny_skia_path
 
 //  Paths describe instructions to create complex 2D graphics.
