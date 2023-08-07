@@ -3,7 +3,14 @@
 name = "intvg"
 version = "0.1.0"
 edition = "2021"
-description = "Rust lib/tools to load/parse/save tvg files, from svg file by usvg"
+license = "MIT OR Apache-2.0"
+authors = [ "MeiHui FAN <mhfan@ustc.edu>" ]
+ repository = "https://github.com/mhfan/intvg"
+description = "lib/tool in Rust to load/save/render tvg file, parse from svg file by usvg"
+categories  = [ "parser-implementations", "rendering::data-formats", "graphics",
+     "multimedia::images" ]     # https://crates.io/category_slugs
+keywords = [ "TinyVG", "SVG", "tvg", "vector-graphic" ]
+exclude  = [ "examples" ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,7 +18,7 @@ description = "Rust lib/tools to load/parse/save tvg files, from svg file by usv
 #byteorder = "1.4"
 #tiny-skia-path = "0.11"
 tiny-skia = "0.11"
-usvg = "0.35"
+usvg  = "0.35"
 kurbo = "0.9"   # Bezier curves utils
 
 [dev-dependencies]
