@@ -4,11 +4,19 @@ use crate::tinyvg::*;
 pub trait Convert { fn from_usvg(tree: &usvg::Tree) -> Self; }
 
 impl Convert for TVGImage {
-    fn from_usvg(tree: &usvg::Tree) -> Self { // traversely check CoordinateRange?
-        let mut img = Self::new();  img.header.scale  = 1;
-        // XXX: handle scale and coordinate range? https://github.com/TinyVG/sdk/pull/5
+    fn from_usvg(tree: &usvg::Tree) -> Self {
+        let mut img = Self::new();
         img.header.width  = tree.size.width() .round() as u32;
         img.header.height = tree.size.height().round() as u32;
+
+        let coordinate_limit = u32::max(img.header.width, img.header.height);
+        let range_bits = match img.header.coordinate_range { CoordinateRange::Default => 16,
+            CoordinateRange::Reduced => 8,  CoordinateRange::Enhanced => 32,
+        } - 1;  let mut scale_bits = 0;
+
+        while scale_bits < range_bits && (coordinate_limit << (scale_bits + 1)) <
+            (1 << range_bits) { scale_bits += 1; }  img.header.scale = scale_bits;
+        // XXX: still need a traversely check CoordinateRange by a null writer?
 
         let trans = usvg::utils::view_box_to_transform(
             tree.view_box.rect, tree.view_box.aspect, tree.size);
