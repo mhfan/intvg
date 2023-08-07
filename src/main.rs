@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("path not specified").unwrap_or("examples/files/tiger.tvg".to_owned());
     let mut tvg = TVGImage::new();
     tvg.load(&mut BufReader::new(File::open(path)?))?;
-    tvg.render()?.save_png("target/foo.png")?;
+    tvg.render(1.0)?.save_png("target/foo.png")?;
 
     Ok(())
 }

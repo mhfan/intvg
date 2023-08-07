@@ -3,13 +3,14 @@ use crate::tinyvg::*;
 use tiny_skia as skia;
 use std::result::Result;
 
-pub trait Render { fn render(&self) -> Result<skia::Pixmap, &str>; }
+pub trait Render { fn render(&self, scale: f32) -> Result<skia::Pixmap, &str>; }
 
 impl Render for TVGImage {
-    fn render(&self) -> Result<skia::Pixmap, &str> {
+    fn render(&self, scale: f32) -> Result<skia::Pixmap, &str> {
         let mut pixmap = skia::Pixmap::new(self.header.width,
             self.header.height).ok_or("Fail to create pixmap")?;
-        let (ts, err_str) = (skia::Transform::identity(), "Fail to build path");
+        let ts = skia::Transform::from_scale(scale, scale);
+        let err_str = "Fail to build path";
 
         impl From<Rect> for skia::Rect {
             fn from(r: Rect) -> Self { unsafe { std::mem::transmute(r) }}
@@ -26,15 +27,15 @@ impl Render for TVGImage {
                     iter.for_each  (|point| pb.line_to(point.x, point.y));  pb.close();
 
                     pixmap.fill_path(&pb.finish().ok_or(err_str)?,
-                        &style_to_paint(self, fill)?, skia::FillRule::Winding, ts, None);
+                        &style_to_paint(self, fill, ts)?, skia::FillRule::Winding, ts, None);
                 }
                 Command::FillRects(FillCMD { fill, coll }) => {
-                    let paint = style_to_paint(self, fill)?;
+                    let paint = style_to_paint(self, fill, ts)?;
                     coll.iter().for_each(|rect| pixmap.fill_rect((*rect).into(),
                         &paint, ts, None));
                 }
                 Command::FillPath (FillCMD { fill, coll }) => {
-                    let paint = style_to_paint(self, fill)?;
+                    let paint = style_to_paint(self, fill, ts)?;
                     for seg in coll {   let res = segment_to_path(seg)?;
                         if res.1 { return Err("Got line width in fill path segment") }
                         pixmap.fill_path(&res.0, &paint, skia::FillRule::Winding, ts, None);
@@ -49,7 +50,7 @@ impl Render for TVGImage {
                     let mut stroke = skia::Stroke::default();
                     stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
                     pixmap.stroke_path(&pb.finish().ok_or(err_str)?,
-                        &style_to_paint(self, line)?, &stroke, ts, None);
+                        &style_to_paint(self, line, ts)?, &stroke, ts, None);
                 }
                 Command::DrawLoop (DrawCMD { line, lwidth, coll },
                     strip) => {     let mut iter = coll.iter();
@@ -61,15 +62,15 @@ impl Render for TVGImage {
                     let mut stroke = skia::Stroke::default();
                     stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
                     pixmap.stroke_path(&pb.finish().ok_or(err_str)?,
-                        &style_to_paint(self, line)?, &stroke, ts, None);
+                        &style_to_paint(self, line, ts)?, &stroke, ts, None);
                 }
                 Command::DrawPath (DrawCMD {
                     line, lwidth, coll }) => {
-                    let paint = style_to_paint(self, line)?;
+                    let paint = style_to_paint(self, line, ts)?;
                     let mut stroke = skia::Stroke::default();
                     stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
                     for seg in coll {
-                        stroke_segment_path(seg, &mut pixmap, &paint, &mut stroke)?;
+                        stroke_segment_path(seg, &mut pixmap, &paint, &mut stroke, ts)?;
                     }
                 }
                 Command::OutlinePolyg(fill, DrawCMD {
@@ -80,17 +81,18 @@ impl Render for TVGImage {
                     iter.for_each  (|point| pb.line_to(point.x, point.y));  pb.close();
 
                     let path = pb.finish().ok_or(err_str)?;
-                    pixmap.fill_path(&path, &style_to_paint(self, fill)?,
+                    pixmap.fill_path(&path, &style_to_paint(self, fill, ts)?,
                         skia::FillRule::Winding, ts, None);
 
                     let mut stroke = skia::Stroke::default();
                     stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
-                    pixmap.stroke_path(&path, &style_to_paint(self, line)?, &stroke, ts, None);
+                    pixmap.stroke_path(&path,
+                        &style_to_paint(self, line, ts)?, &stroke, ts, None);
                 }
                 Command::OutlineRects(fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    let paint = style_to_paint(self, fill)?;
-                    let pline = style_to_paint(self, line)?;
+                    let paint = style_to_paint(self, fill, ts)?;
+                    let pline = style_to_paint(self, line, ts)?;
                     let mut stroke = skia::Stroke::default();
                     stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
 
@@ -102,15 +104,16 @@ impl Render for TVGImage {
                 }
                 Command::OutlinePath (fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    let paint = style_to_paint(self, fill)?;
-                    let pline = style_to_paint(self, line)?;
+                    let paint = style_to_paint(self, fill, ts)?;
+                    let pline = style_to_paint(self, line, ts)?;
                     let mut stroke = skia::Stroke::default();
                     stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
 
                     for seg in coll {   let res = segment_to_path(seg)?;
                         pixmap.fill_path(&res.0, &paint, skia::FillRule::Winding, ts, None);
-                        if !res.1 { pixmap.stroke_path(&res.0, &pline, &stroke, ts, None);
-                        } else { stroke_segment_path(seg, &mut pixmap, &pline, &mut stroke)?; }
+                        if res.1 {
+                            stroke_segment_path(seg, &mut pixmap, &pline, &mut stroke, ts)?;
+                        } else { pixmap.stroke_path(&res.0, &pline, &stroke, ts, None); }
                     }
                 }
             }
@@ -118,8 +121,8 @@ impl Render for TVGImage {
     }   // rasterize
 }
 
-fn stroke_segment_path(seg: &Segment, pixmap: &mut skia::Pixmap,
-    paint: &skia::Paint, stroke: &mut skia::Stroke) -> Result<(), &'static str> {
+fn stroke_segment_path(seg: &Segment, pixmap: &mut skia::Pixmap, paint: &skia::Paint,
+    stroke: &mut skia::Stroke, ts: skia::Transform) -> Result<(), &'static str> {
     let mut start: skia::Point = (seg.start.x, seg.start.y).into();
 
     for cmd in &seg.cmds {
@@ -147,7 +150,7 @@ fn stroke_segment_path(seg: &Segment, pixmap: &mut skia::Pixmap,
         }   start = pb.last_point().ok_or("no last point")?;
 
         pixmap.stroke_path(&pb.finish().ok_or("Fail to get path from a segment")?,
-            &paint, &stroke, skia::Transform::identity(), None);
+            &paint, &stroke, ts, None);
     }   Ok(())
 }
 
@@ -180,7 +183,8 @@ fn segment_to_path(seg: &Segment) -> Result<(skia::Path, bool), &'static str> {
     }   Ok((pb.finish().ok_or("Fail to build path from segments")?, change_lw))
 }
 
-fn style_to_paint<'a>(img: &TVGImage, style: &Style) -> Result<skia::Paint<'a>, &'static str> {
+fn style_to_paint<'a>(img: &TVGImage, style: &Style, ts: skia::Transform) ->
+    Result<skia::Paint<'a>, &'static str> {
     impl From<RGBA8888> for skia::Color {  // XXX: why not use ColorU8 defaultly in skia?
         fn from(c: RGBA8888) -> Self { Self::from_rgba8(c.r, c.g, c.b, c.a) }
     }
@@ -199,7 +203,7 @@ fn style_to_paint<'a>(img: &TVGImage, style: &Style) -> Result<skia::Paint<'a>, 
             paint.shader = skia::LinearGradient::new(points.0.into(), points.1.into(),
                 vec![ skia::GradientStop::new(0.0, img.lookup_color(cindex.0).into()),
                       skia::GradientStop::new(1.0, img.lookup_color(cindex.1).into()),
-                ],    skia::SpreadMode::Pad, skia::Transform::identity(),
+                ],    skia::SpreadMode::Pad, ts,
             ).ok_or("Fail to create linear gradient shader")?;  paint.anti_alias = false;
         }
         Style::RadialGradient { points, cindex } => {
@@ -211,7 +215,7 @@ fn style_to_paint<'a>(img: &TVGImage, style: &Style) -> Result<skia::Paint<'a>, 
             paint.shader = skia::RadialGradient::new(points.0.into(), points.1.into(), radius,
                 vec![ skia::GradientStop::new(0.0, img.lookup_color(cindex.0).into()),
                       skia::GradientStop::new(1.0, img.lookup_color(cindex.1).into()),
-                ],    skia::SpreadMode::Pad, skia::Transform::identity(),
+                ],    skia::SpreadMode::Pad, ts,
             ).ok_or("Fail to create radial gradient shader")?;  paint.anti_alias = false;
         }
     }   Ok(paint)

@@ -17,7 +17,7 @@
     tvg.save(&mut BufWriter::new(File::create("target/foo.tvg")?))?;
 
     tvg.load(&mut BufReader::new(File::open("examples/files/tiger.tvg")?))?;
-    tvg.render()?.save_png("target/foo.png")?;
+    tvg.render(1.0)?.save_png("target/foo.png")?;
 
     fs::read_dir("examples/files")?
         .try_for_each(|entry| -> intvg::tinyvg::Result<()> {
