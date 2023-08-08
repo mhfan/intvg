@@ -20,10 +20,13 @@ exclude  = [ "examples" ]
 tiny-skia = "0.11"
 usvg  = "0.35"
 kurbo = "0.9"   # Bezier curves utils
-build-time = { version = "0.1", git = "https://github.com/AlephAlpha/build-time" }
+#build-time = { version = "0.1", git = "https://github.com/AlephAlpha/build-time" }
 
 [dev-dependencies]
 #rexpect = "0.5"
+
+[build-dependencies]
+chrono = "0.4"
 
 [workspace]
 

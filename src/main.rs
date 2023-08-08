@@ -4,8 +4,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use intvg::{tinyvg::TVGImage, render::Render, convert::Convert};
 
     eprintln!(r"{} v{}-g{}, {}, {} 🦀", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"),
-        env!("BUILD_GIT_HASH"), build_time::build_time_local!("%H:%M:%S%:z %Y-%m-%d"),
-        env!("CARGO_PKG_AUTHORS"));     //option_env!("ENV_VAR_NAME");
+        env!("BUILD_GIT_HASH"), env!("BUILD_TIMESTAMP"), env!("CARGO_PKG_AUTHORS"));
+        //build_time::build_time_local!("%H:%M:%S%:z %Y-%m-%d"),    //option_env!("ENV_VAR_NAME");
 
     let (cnt, mut args) = (env::args().count(), env::args());
     if   cnt < 2 { println!("Usage: {} <path-to-svg/tvg> [<path-to-tvg/png>]\n",
