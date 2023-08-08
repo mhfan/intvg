@@ -41,6 +41,13 @@ args = [ "llvm-cov", #"--doctests", "--include-ffi",
             "--lcov", "--output-path", "lcov.info", #"nextest",
 ]   # https://github.com/taiki-e/cargo-llvm-cov
 
+[tasks.codecov]
+#command = "codecov"
+dependencies = [ "coverage" ]
+env = { "CODECOV_TOKEN" = "b24b2436-512a-461e-9947-488213b27add" }
+#args = [ "-t", "${CODECOV_TOKEN}", #"--url", "https://app.codecov.io/gh/mhfan/intvg"
+#]
+
 [tasks.bench-fg]    # https://github.com/flamegraph-rs/flamegraph
 #command = "cargo"
 #args = [ "flamegraph", "--bench", "calc24_bench" ]
@@ -55,9 +62,10 @@ command = "cargo"   # cargo bench --features pprof
 args = [ "bench", "--features", "pprof", ]
 
 [tasks.publish]
-command = "cargo"
+#command = "cargo"
 #dependencies = [ "package" ]
-args = [ "publish", "--registry", "crates-io" ]
+env = { "CARGO_MAKE_CARGO_PUBLISH_FLAGS" = "--registry crates-io" }
+#args = [ "publish", "--registry", "crates-io" ]
 
 # cargo modules generate tree --package inrust --lib --with-types --with-tests
 
