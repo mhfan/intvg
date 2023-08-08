@@ -8,7 +8,7 @@
     fontdb.load_system_fonts();
 
     //let mut ptys = rexpect::spawn(concat!(env!("CARGO_BIN_EXE_intvg"),
-    //    " data/tiger.svg target/tiger.png"), Some(1_000))?;   ptys.exp_eof()?;
+    //    " data/tiger.svg target/foo.png"), Some(1_000))?;   ptys.exp_eof()?;
 
     let mut tvg = TVGImage::new();
     assert!(tvg.load(&mut BufReader::new(File::open("data/tiger.svg")?))
@@ -25,8 +25,8 @@
                 let mut tvg = TVGImage::new();
                 tvg.load(&mut BufReader::new(File::open(&path)?))?;
                 tvg.save(&mut BufWriter::new(File::create("target/foo.tvg")?))?;    tvg
-            } else  // XXX: binary compare and reload?
-            if ext == "svg" { println!("{}: ", path.display());
+                // XXX: binary compare and reload?
+            } else if ext == "svg" { println!("{}: ", path.display());
                 let mut tree = usvg::Tree::from_data(&fs::read(&path)?,
                     &usvg::Options::default())?;
                 tree.convert_text(&fontdb);

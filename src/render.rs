@@ -19,12 +19,13 @@ impl Render for TVGImage {
         }
 
         for cmd in &self.commands {
+            let mut pb = skia::PathBuilder::new();
             match cmd {     Command::EndOfDocument => (),
+
                 Command::FillPolyg(FillCMD { fill, coll }) => {
                     let mut iter = coll.iter();
-                    let mut pb = skia::PathBuilder::new();
-                    iter.next().map(|point| pb.move_to(point.x, point.y));
-                    iter.for_each  (|point| pb.line_to(point.x, point.y));  pb.close();
+                    if let Some(pt) = iter.next() { pb.move_to(pt.x, pt.y) }
+                    iter.for_each(|pt| pb.line_to(pt.x, pt.y));  pb.close();
 
                     pixmap.fill_path(&pb.finish().ok_or(err_str)?,
                         &style_to_paint(self, fill, ts)?, skia::FillRule::Winding, ts, None);
@@ -42,33 +43,31 @@ impl Render for TVGImage {
                     }
                 }
                 Command::DrawLines(DrawCMD { line, lwidth, coll }) => {
-                    let mut pb = skia::PathBuilder::new();
                     coll.iter().for_each(|line| {
                         pb.move_to(line.start.x, line.start.y);
                         pb.line_to(line.  end.x, line.  end.y); });
 
-                    let mut stroke = skia::Stroke::default();
-                    stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
+                    let stroke = skia::Stroke {
+                        line_cap: skia::LineCap::Round, width: *lwidth, ..Default::default() };
                     pixmap.stroke_path(&pb.finish().ok_or(err_str)?,
                         &style_to_paint(self, line, ts)?, &stroke, ts, None);
                 }
                 Command::DrawLoop (DrawCMD { line, lwidth, coll },
                     strip) => {     let mut iter = coll.iter();
-                    let mut pb = skia::PathBuilder::new();
-                    iter.next().map(|point| pb.move_to(point.x, point.y));
-                    iter.for_each  (|point| pb.line_to(point.x, point.y));
+                    if let Some(pt) = iter.next() { pb.move_to(pt.x, pt.y) }
+                    iter.for_each(|pt| pb.line_to(pt.x, pt.y));
                     if !*strip { pb.close(); }
 
-                    let mut stroke = skia::Stroke::default();
-                    stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
+                    let stroke = skia::Stroke {
+                        line_cap: skia::LineCap::Round, width: *lwidth, ..Default::default() };
                     pixmap.stroke_path(&pb.finish().ok_or(err_str)?,
                         &style_to_paint(self, line, ts)?, &stroke, ts, None);
                 }
                 Command::DrawPath (DrawCMD {
                     line, lwidth, coll }) => {
                     let paint = style_to_paint(self, line, ts)?;
-                    let mut stroke = skia::Stroke::default();
-                    stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
+                    let mut stroke = skia::Stroke {
+                        line_cap: skia::LineCap::Round, width: *lwidth, ..Default::default() };
                     for seg in coll {
                         stroke_segment_path(seg, &mut pixmap, &paint, &mut stroke, ts)?;
                     }
@@ -76,16 +75,15 @@ impl Render for TVGImage {
                 Command::OutlinePolyg(fill, DrawCMD {
                     line, lwidth, coll }) => {
                     let mut iter = coll.iter();
-                    let mut pb = skia::PathBuilder::new();
-                    iter.next().map(|point| pb.move_to(point.x, point.y));
-                    iter.for_each  (|point| pb.line_to(point.x, point.y));  pb.close();
+                    if let Some(pt) = iter.next() { pb.move_to(pt.x, pt.y) }
+                    iter.for_each(|pt| pb.line_to(pt.x, pt.y));  pb.close();
 
                     let path = pb.finish().ok_or(err_str)?;
                     pixmap.fill_path(&path, &style_to_paint(self, fill, ts)?,
                         skia::FillRule::Winding, ts, None);
 
-                    let mut stroke = skia::Stroke::default();
-                    stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
+                    let stroke = skia::Stroke {
+                        line_cap: skia::LineCap::Round, width: *lwidth, ..Default::default() };
                     pixmap.stroke_path(&path,
                         &style_to_paint(self, line, ts)?, &stroke, ts, None);
                 }
@@ -93,8 +91,8 @@ impl Render for TVGImage {
                     line, lwidth, coll }) => {
                     let paint = style_to_paint(self, fill, ts)?;
                     let pline = style_to_paint(self, line, ts)?;
-                    let mut stroke = skia::Stroke::default();
-                    stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
+                    let stroke = skia::Stroke {
+                        line_cap: skia::LineCap::Round, width: *lwidth, ..Default::default() };
 
                     coll.iter().for_each(|rect| {
                         let path = skia::PathBuilder::from_rect((*rect).into());
@@ -106,8 +104,8 @@ impl Render for TVGImage {
                     line, lwidth, coll }) => {
                     let paint = style_to_paint(self, fill, ts)?;
                     let pline = style_to_paint(self, line, ts)?;
-                    let mut stroke = skia::Stroke::default();
-                    stroke.line_cap = skia::LineCap::Round;     stroke.width = *lwidth;
+                    let mut stroke = skia::Stroke {
+                        line_cap: skia::LineCap::Round, width: *lwidth, ..Default::default() };
 
                     for seg in coll {   let res = segment_to_path(seg)?;
                         pixmap.fill_path(&res.0, &paint, skia::FillRule::Winding, ts, None);
@@ -150,7 +148,7 @@ fn stroke_segment_path(seg: &Segment, pixmap: &mut skia::Pixmap, paint: &skia::P
         }   start = pb.last_point().ok_or("no last point")?;
 
         pixmap.stroke_path(&pb.finish().ok_or("Fail to get path from a segment")?,
-            &paint, &stroke, ts, None);
+            paint, stroke, ts, None);
     }   Ok(())
 }
 
@@ -160,7 +158,7 @@ fn segment_to_path(seg: &Segment) -> Result<(skia::Path, bool), &'static str> {
 
     let mut change_lw = false;
     for cmd in &seg.cmds {
-        if let Some(_) = cmd.lwidth { change_lw = true }
+        if cmd.lwidth.is_some() { change_lw = true }
 
         match &cmd.instr {
             SegInstr::Line  { end } => pb.line_to(end.x, end.y),
@@ -221,7 +219,7 @@ fn style_to_paint<'a>(img: &TVGImage, style: &Style, ts: skia::Transform) ->
     }   Ok(paint)
 }
 
-trait PathBuilderExt {
+trait PathBuilderExt {  #[allow(clippy::too_many_arguments)]
     fn arc_to(&mut self, rx: f32, ry: f32, rotation: f32,
         large: bool, sweep: bool, x: f32, y: f32);
 }
@@ -231,7 +229,7 @@ impl PathBuilderExt for skia::PathBuilder {
         large: bool, sweep: bool, x: f32, y: f32) {
         let prev = match self.last_point() { Some(v) => v, None => return };
 
-        let svg_arc = kurbo::SvgArc {
+        let svg_arc = kurbo::SvgArc {   // lyon_geom: https://github.com/nical/lyon
             from: kurbo::Point::new(prev.x as f64, prev.y as f64),
               to: kurbo::Point::new( x as f64,  y as f64),
             radii: kurbo::Vec2::new(rx as f64, ry as f64),

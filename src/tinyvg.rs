@@ -82,7 +82,7 @@ pub struct Image<R,   W = std::io::BufWriter<std::fs::File>> {
 }
 
 impl<R: io::Read, W: io::Write> Image<R, W> {
-    pub fn new() -> Self { Self {
+    #[allow(clippy::new_without_default)] pub fn new() -> Self { Self {
             header: Header { //magic: TVG_MAGIC, version: TVG_VERSION,
                 scale: 0, color_encoding: ColorEncoding::RGBA8888,
                 coordinate_range: CoordinateRange::Default,
@@ -232,7 +232,7 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         let mut vlen = Vec::with_capacity(count);
         let mut coll = Vec::with_capacity(count);
         for _ in 0..count { vlen.push(reader.read_var_uint()? + 1); }
-        for i in 0..count { coll.push(self.read_segment(vlen[i], reader)?); }
+        for len in vlen { coll.push(self.read_segment(len, reader)?); }
         Ok(coll)
     }
 
@@ -386,8 +386,8 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
 
             Command::OutlinePath (fill, cmd) => {
                 writer.write_u8( (fill.to_u8() << 6) | 7)?;
-                if !(cmd.coll.len() < ((1 << 6) + 1)) { return Err(TVGError {
-                    kind: ErrorKind::OutOfRange, msg: "outline segment" }) }
+                if (1 << 6) < cmd.coll.len() { return Err(TVGError {
+                    kind: ErrorKind::OutOfRange, msg: "outline path segment" }) }
                 writer.write_u8((cmd.line.to_u8() << 6) | (cmd.coll.len() as u8 - 1))?;
                 self.write_style( fill, writer)?;       self.write_style(&cmd.line, writer)?;
                 self.write_unit(cmd.lwidth, writer)?;   self.write_path (&cmd.coll, writer)
@@ -414,8 +414,8 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
     fn write_outline<T>(&self, idx: u8, fill: &Style, cmd: &DrawCMD<T>, writer: &mut W,
         write_fn: impl Fn(&Self, &T, &mut W) -> Result<()>) -> Result<()> {
         writer.write_u8((fill.to_u8() << 6) | idx)?;
-        if !(cmd.coll.len() < ((1 << 6) + 1)) { return Err(TVGError {
-            kind: ErrorKind::OutOfRange, msg: "outline segment" }) }
+        if (1 << 6) < cmd.coll.len() { return Err(TVGError {
+            kind: ErrorKind::OutOfRange, msg: "outline path segment" }) }
         writer.write_u8((cmd.line.to_u8() << 6) | (cmd.coll.len() as u8 - 1))?;
         self.write_style(fill, writer)?;        self.write_style(&cmd.line, writer)?;
         self.write_unit(cmd.lwidth, writer)?;
@@ -470,8 +470,8 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
     fn write_style(&self, style: &Style, writer: &mut W) -> Result<()> {
         let mut write_gradient =
             |points: &(Point, Point), cindex: &(VarUInt, VarUInt)| {
-            if !(cindex.0 < self.color_table.len() as u32) ||
-               !(cindex.1 < self.color_table.len() as u32) { return Err(TVGError {
+            if cindex.0 >= self.color_table.len() as u32 ||
+               cindex.1 >= self.color_table.len() as u32 { return Err(TVGError {
                 kind: ErrorKind::OutOfRange, msg: "invalid color index" }) }
             self.write_point(&points.0, writer)?;   self.write_point(&points.1, writer)?;
             writer.write_var_uint(cindex.0)?;  Ok(writer.write_var_uint(cindex.1)?)
@@ -479,7 +479,7 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
 
         match style {
             Style::FlatColor(idx) => {
-                if !(*idx < self.color_table.len() as u32) { return Err(TVGError {
+                if *idx >= self.color_table.len() as u32 { return Err(TVGError {
                     kind: ErrorKind::OutOfRange, msg: "invalid color index" }) }
                 Ok(writer.write_var_uint(*idx)?)
             }
@@ -512,7 +512,7 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         Result<()> { Ok(writer.write_i32_le(val)?) }
 
     fn write_unit(&self, val: Unit, writer: &mut W)-> Result<()> {
-        Ok((self.write_range)(writer, (val * (1u32 << self.header.scale) as f32 + 0.5) as i32)?)
+        (self.write_range)(writer, (val * (1u32 << self.header.scale) as f32 + 0.5) as i32)
     }
 }
 

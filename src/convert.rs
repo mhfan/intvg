@@ -26,12 +26,12 @@ impl Convert for TVGImage {
     }
 }
 
-fn convert_children(img: &mut TVGImage, tree: &usvg::Tree,
+fn convert_children(img: &mut TVGImage, _tree: &usvg::Tree,
     parent: &usvg::Node, trans: usvg::Transform) {
     for child in parent.children() {
         match *child.borrow() {
             usvg::NodeKind::Group(ref g) =>
-                convert_children(img, tree, &child, trans.pre_concat(g.transform)),
+                convert_children(img, _tree, &child, trans.pre_concat(g.transform)),
 
             usvg::NodeKind::Path(ref path) => { // XXX: how to avoid clone path.data?
                 let new_path = (*path.data).clone().transform(trans).unwrap();
@@ -40,7 +40,7 @@ fn convert_children(img: &mut TVGImage, tree: &usvg::Tree,
                 let fill = path.  fill.as_ref().and_then(|fill|
                     convert_paint(img, &fill.paint, fill.opacity, bbox));
                 let line = path.stroke.as_ref().and_then(|line| {
-                    lwidth = line.width.get() as f32;
+                    lwidth = line.width.get();
                     convert_paint(img, &line.paint, line.opacity, bbox) });
 
                 let cmd = match (fill, line) {  // XXX: detect simple shape (line/rect)?
@@ -80,6 +80,7 @@ fn convert_path_segment(path: &usvg::tiny_skia_path::Path) -> Vec<Segment> {
     }; if !cmds.is_empty() { coll.push(Segment { start, cmds }); }     coll
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<Point> for usvg::tiny_skia_path::Point {
     //fn into(self) -> Point { Point { x: self.x, y: self.y } }
     fn into(self) -> Point { unsafe { std::mem::transmute(self) } }
@@ -105,7 +106,8 @@ fn convert_paint(img: &mut TVGImage, paint: &usvg::Paint,
         img.push_color(color)
     }
 
-    match paint { usvg::Paint::Pattern(_) => None,
+    match paint { usvg::Paint::Pattern(_) => {
+            eprintln!("pattern painting is not supported"); None },
         usvg::Paint::Color(color) => {
             let color = RGBA8888 { r: color.red, g: color.green,
                 b: color.blue, a: opacity.to_u8() };

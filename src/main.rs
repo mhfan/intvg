@@ -1,4 +1,7 @@
 
+#![cfg_attr(coverage_nightly, feature(no_coverage))]
+
+#[cfg_attr(coverage_nightly, no_coverage)] //#[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{env, fs::{self, File}, io::{BufReader, BufWriter}};
     use intvg::{tinyvg::TVGImage, render::Render, convert::Convert};
@@ -9,8 +12,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (cnt, mut args) = (env::args().count(), env::args());
     if   cnt < 2 { println!("Usage: {} <path-to-svg/tvg> [<path-to-tvg/png>]\n",
-            args.nth(0).unwrap());  return Ok(())
-    }   // all safe unwrap
+            args.next().unwrap());  return Ok(())
+    }   // all unwrap are safe
 
     let mut path = args.nth(1).unwrap();
     let mut tvg = if path.ends_with(".svg") {
