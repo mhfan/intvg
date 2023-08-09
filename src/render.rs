@@ -5,7 +5,7 @@ use std::result::Result;
 
 pub trait Render { fn render(&self, scale: f32) -> Result<skia::Pixmap, &str>; }
 
-impl Render for TVGImage {
+impl Render for TVGImage {  // XXX: to render with femtovg?
     fn render(&self, scale: f32) -> Result<skia::Pixmap, &str> {
         let mut pixmap = skia::Pixmap::new(self.header.width,
             self.header.height).ok_or("Fail to create pixmap")?;

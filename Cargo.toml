@@ -10,7 +10,7 @@ description = "lib/tool in Rust to load/save/render tvg file, parse from svg fil
 categories  = [ "parser-implementations", "rendering::data-formats", "graphics",
      "multimedia::images" ]     # https://crates.io/category_slugs
 keywords = [ "TinyVG", "SVG", "tvg", "vector-graphic" ]
-exclude  = [ "examples" ]
+#exclude  = [ "examples" ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

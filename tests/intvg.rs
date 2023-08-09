@@ -7,8 +7,12 @@
     let mut fontdb = usvg::fontdb::Database::new();
     fontdb.load_system_fonts();
 
-    //let mut ptys = rexpect::spawn(concat!(env!("CARGO_BIN_EXE_intvg"),
-    //    " data/tiger.svg target/foo.png"), Some(1_000))?;   ptys.exp_eof()?;
+    /* std::fs::remove_file("target/foo.tvg").unwrap();
+    let mut ptys = rexpect::spawn(concat!(env!("CARGO_BIN_EXE_intvg"),
+        "  data/tiger.svg target/foo.tvg"), Some(1_000))?;   ptys.exp_eof()?;
+    std::fs::remove_file("target/foo.png").unwrap();
+    let mut ptys = rexpect::spawn(concat!(env!("CARGO_BIN_EXE_intvg"),
+        "  data/tiger.tvg target/foo.png"), Some(1_000))?;   ptys.exp_eof()?; */
 
     let mut tvg = TVGImage::new();
     assert!(tvg.load(&mut BufReader::new(File::open("data/tiger.svg")?))

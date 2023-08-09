@@ -81,6 +81,8 @@ pub struct Image<R,   W = std::io::BufWriter<std::fs::File>> {
     _reader: PhantomData<R>, _writer: PhantomData<W>,
 }
 
+//impl<R: io::Read, W: io::Write> Default for Image<R, W> { fn default() -> Self { Self::new() } }
+
 impl<R: io::Read, W: io::Write> Image<R, W> {
     #[allow(clippy::new_without_default)] pub fn new() -> Self { Self {
             header: Header { //magic: TVG_MAGIC, version: TVG_VERSION,
