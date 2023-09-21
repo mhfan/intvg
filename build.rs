@@ -10,7 +10,7 @@ fn main() {     // https://doc.rust-lang.org/stable/cargo/reference/build-script
     println!("cargo:rustc-env=BUILD_GIT_HASH={}", String::from_utf8(output.stdout).unwrap());
 
     println!("cargo:rustc-env=BUILD_TIMESTAMP={}",
-        chrono::Local::now().format("%H:%M:%S%:z %Y-%m-%d"));
+        chrono::Local::now().format("%H:%M:%S%z %Y-%m-%d"));
 
     //println!("cargo:rerun-if-changed=build.rs");    // XXX: prevent re-run indead
 }

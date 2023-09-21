@@ -93,8 +93,7 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
 
              read_range: Self::read_default, write_range: Self::write_default,
             _reader: PhantomData, _writer: PhantomData
-        }
-    }
+    }}
 
     pub fn lookup_color(&self, idx: VarUInt) -> RGBA8888 { self.color_table[idx as usize] }
     pub fn push_color(&mut self, color: RGBA8888) -> VarUInt {
@@ -569,10 +568,10 @@ const TVG_VERSION: u8 = 1;
 type VarUInt = u32;
 
 //#[derive(Clone, Copy)] struct Unit(f32);
-type Unit = f32;    // Each Unit takes up 16/8/32 bits
+type Unit = f32;    // Each Unit takes up 16/8/32 bits, // XXX: can be fixed-point?
 
 trait TVGRead: io::Read  {
-    /*#[inline] fn read_value<T>(&mut self) -> io::Result<T> {
+    /*#[inline] fn read_value<T>(&mut self) -> io::Result<T> {    // XXX:
         let mut buf = [0; core::mem::size_of::<T>()];
         self.read_exact(&mut buf)?; Ok(T::from_le_bytes(buf))
     }*/
