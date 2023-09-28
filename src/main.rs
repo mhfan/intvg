@@ -1,7 +1,7 @@
 
-#![cfg_attr(coverage_nightly, feature(no_coverage))]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
-#[cfg_attr(coverage_nightly, no_coverage)] //#[cfg(not(tarpaulin_include))]
+#[cfg_attr(coverage_nightly, coverage(off))] //#[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{env, fs::{self, File}, io::{BufReader, BufWriter}};
     use intvg::{tinyvg::TVGImage, render::Render, convert::Convert};
