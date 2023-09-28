@@ -1,0 +1,5 @@
+{
+    "C_Cpp.default.defines": [ "STANDALONE_",
+	"FALL_THROUGH=((void)0)", "FT_BEGIN_HEADER" ],
+    "C_Cpp.default.includePath": [ "3rdparty/evg", "3rdparty/ftg" ]
+}

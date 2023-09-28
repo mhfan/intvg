@@ -3,3 +3,9 @@ target
 Cargo.lock
 lcov.info
 
+3rdparty/*
+!3rdparty/evg
+3rdparty/evg/*
+!3rdparty/evg/constants.c
+!3rdparty/layout.sh
+
