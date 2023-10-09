@@ -2,6 +2,7 @@
 ![Build status](https://github.com/mhfan/intvg/actions/workflows/rust-ci.yml/badge.svg)
 [![codecov](https://codecov.io/gh/mhfan/intvg/graph/badge.svg)](https://codecov.io/gh/mhfan/intvg)
 [![Crates.io](https://img.shields.io/crates/v/intvg.svg)](https://crates.io/crates/intvg)
+[![dependency status](https://deps.rs/repo/github/mhfan/intvg/status.svg)](https://deps.rs/repo/github/mhfan/intvg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 # Another Rust implementation for [TinyVG](https://tinyvg.tech/) image format

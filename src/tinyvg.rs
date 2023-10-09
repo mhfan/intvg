@@ -43,7 +43,7 @@ impl From<TryFromIntError> for TVGError {
     fn from(e: TryFromIntError) -> Self { Self { kind: ErrorKind::IntError(e), msg: "" } }
 }
 
-//  https://tinyvg.tech/download/specification.txt
+//  https://tinyvg.tech/download/specification.txt, https://github.com/TinyVG/sdk
 //  https://github.com/lily-mara/tinyvg-rs, https://github.com/dataphract/tinyvg-rs
 //
 //  TinyVG files are made up of a header, followed by a color lookup table
@@ -184,7 +184,7 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
             8 => {  let res = self.read_outline(skind, reader,
                 Self::read_point)?;     Command::OutlinePolyg(res.0, res.1)
             }
-            9 => {  let res = self.read_outline(skind, reader,
+            9 => {  let res  = self.read_outline(skind, reader,
                 Self::read_rect)?;      Command::OutlineRects(res.0, res.1)
             }
 
@@ -629,7 +629,7 @@ impl<R: io::Read>  TVGRead  for R {}
 #[derive(Clone, Copy)] pub struct RGBA8888 { pub r:  u8, pub g:  u8, pub b:  u8, pub a:  u8 }
 //struct RGBAf32  { r: f32, g: f32, b: f32, a: f32 }  // scRGB color space
 // color channel between 0 and 100% intensity, mapped to value range
-//use tiny_skia::{ColorU8, Color};    // XXX: tiny_skia_path
+//use tiny_skia::{ColorU8, Color, Rect, Point};     // XXX: tiny_skia_path
 
 //  Commands:
 //  TinyVG files contain a sequence of draw commands that must be executed
@@ -686,7 +686,6 @@ pub struct Line { pub start: Point, pub end: Point, }
 //  is interpretet as binary b0001.0011.
 #[derive(Clone, Copy)] pub struct Point { pub x: Unit, pub y: Unit }
 #[derive(Clone, Copy)] pub struct Rect  { pub l: Unit, pub t: Unit, pub r: Unit, pub b: Unit }
-//use tiny_skia::{Rect, Point};   // XXX: tiny_skia_path
 
 //  Paths describe instructions to create complex 2D graphics.
 //

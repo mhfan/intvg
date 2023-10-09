@@ -1,5 +1,6 @@
 
 use crate::tinyvg::*;
+use usvg::tiny_skia_path as skia;
 
 pub trait Convert { fn from_usvg(tree: &usvg::Tree) -> Self; }
 
@@ -21,8 +22,7 @@ impl Convert for TVGImage {
         let trans = usvg::utils::view_box_to_transform(
             tree.view_box.rect, tree.view_box.aspect, tree.size);
         convert_children(&mut img, tree, &tree.root, trans);
-        eprintln!("{:?}", &img.header);
-        img
+        eprintln!("{:?}", &img.header);     img
     }
 }
 
@@ -60,30 +60,29 @@ fn convert_children(img: &mut TVGImage, _tree: &usvg::Tree,
     }
 }
 
-fn convert_path_segment(path: &usvg::tiny_skia_path::Path) -> Vec<Segment> {
+fn convert_path_segment(path: &skia::Path) -> Vec<Segment> {
     let (mut coll, mut cmds) = (vec![], vec![]);
     let  mut start = Point { x: 0.0, y: 0.0 };
     for seg in path.segments() {
         let instr = match seg {
-            usvg::tiny_skia_path::PathSegment::MoveTo(pt) => { start = pt.into();
+            skia::PathSegment::MoveTo(pt) => { start = pt.into();
                 if !cmds.is_empty() {   coll.push(Segment { start, cmds });
                     cmds = vec![]; }    continue
             }
-            usvg::tiny_skia_path::PathSegment::LineTo(pt) =>
+            skia::PathSegment::LineTo(pt) =>
                 SegInstr::Line { end: pt.into() },
-            usvg::tiny_skia_path::PathSegment::QuadTo(ctrl, end) =>
+            skia::PathSegment::QuadTo(ctrl, end) =>
                 SegInstr::QuadBezier { ctrl: ctrl.into(), end: end.into() },
-            usvg::tiny_skia_path::PathSegment::CubicTo(ctrl1, ctrl2, end) =>
+            skia::PathSegment::CubicTo(ctrl1, ctrl2, end) =>
                 SegInstr::CubicBezier { ctrl: (ctrl1.into(), ctrl2.into()), end: end.into() },
-            usvg::tiny_skia_path::PathSegment::Close => SegInstr::ClosePath,
+            skia::PathSegment::Close => SegInstr::ClosePath,
         };  cmds.push(SegmentCommand { instr, lwidth: None });
-    }; if !cmds.is_empty() { coll.push(Segment { start, cmds }); }     coll
+    }   if !cmds.is_empty() { coll.push(Segment { start, cmds }); }     coll
 }
 
-#[allow(clippy::from_over_into)]
-impl Into<Point> for usvg::tiny_skia_path::Point {
-    //fn into(self) -> Point { Point { x: self.x, y: self.y } }
+#[allow(clippy::from_over_into)] impl Into<Point> for skia::Point {
     fn into(self) -> Point { unsafe { std::mem::transmute(self) } }
+    //fn into(self) -> Point { Point { x: self.x, y: self.y } }
 }
 
 fn convert_paint(img: &mut TVGImage, paint: &usvg::Paint,
