@@ -13,3 +13,5 @@ TinyVG textual representation (.tvgt) is only for debugging purposes which can b
 
 ## Binding [GPAC/EVG 2D rendering engine](https://github.com/gpac/gpac/tree/master/src/evg) (with Fixed-point math)
 
+## Binding [Blend2D rendering engine](https://github.com/blend2d/blend2d) (with single precision)
+

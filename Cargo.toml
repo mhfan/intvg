@@ -7,9 +7,9 @@ license = "MIT OR Apache-2.0"
 authors = [ "MeiHui FAN <mhfan@ustc.edu>" ]
  repository = "https://github.com/mhfan/intvg"
 description = "lib/tool in Rust to load/save/render tvg file, parse from svg file by usvg"
-categories  = [ "parser-implementations", "rendering::data-formats", "graphics",
-     "multimedia::images" ]     # https://crates.io/category_slugs
-keywords = [ "TinyVG", "SVG", "tvg", "vector-graphic" ]
+categories  = [ "parser-implementations", "rendering::data-formats", "rendering::engine",
+     "graphics", "multimedia::images" ] # https://crates.io/category_slugs
+keywords = [ "TinyVG", "SVG", "tvg", "vector-graphic", "EVG", "Blend2D", "B2D" ]
 #exclude  = [ "examples" ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -29,12 +29,15 @@ png = { version = "0.17", optional = true }
 #doctest = false
 
 [features]
+b2d = []
+b2d_sfp = [ "b2d" ]
+
 ftg = []
 evg_fixed = [ "evg" ] # quite slow than floating point on Apple M1
 evg = [ "dep:png" ]
 
 #cc = [ "dep:cc", "dep:bindgen", "dep:glob" ]   # implied by optional dependency
-#default = [ "evg" ]
+#default = [ "evg", "b2d" ]
 
 [dev-dependencies]
 #rexpect = "0.5"

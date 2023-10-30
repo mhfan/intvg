@@ -19,6 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[allow(unused)] let path = std::path::PathBuf::from(std::env::var("OUT_DIR")?);
     #[cfg(feature = "ftg")] binding_ftg(&path)?;
     #[cfg(feature = "evg")] binding_evg(&path)?;
+    #[cfg(feature = "b2d")] binding_b2d(&path)?;
 
     Ok(())
 }
@@ -87,3 +88,88 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[cfg(feature = "b2d")] fn binding_b2d(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let (b2d_src, jit_src) = ("3rdparty/blend2d/src", "3rdparty/asmjit/src");
+    #[allow(unused_mut)] let mut bgen = bindgen::builder();
+    let module = "blend2d"; // "blend2d_bindings";
+
+    let mut cc = cc::Build::new();
+    #[cfg(feature = "b2d_sfp")] { //println!("cargo:rustc-cfg=feature=\"b2d_sfp\"");
+        #[cfg(target_arch = "aarch64")] cc.flag("-mno-outline-atomics");
+        cc.define("BLEND2D_NO_DFP",  None).flag("-fsingle-precision-constant")
+          .define("BL_BUILD_NO_TLS", None).flag("-Wno-maybe-uninitialized").compiler("g++-13");
+        bgen = bgen.clang_arg("-DBLEND2D_NO_DFP");
+    }   blend2d_simd(&mut cc);
+
+    cc.cpp(true).flag("-std=c++17").define("ASMJIT_EMBED", None)
+        .define("ASMJIT_NO_STDCXX", None).define("ASMJIT_NO_FOREIGN", None)
+        .files(glob::glob(&format!("{jit_src}/**/*.cpp"))?.filter_map(Result::ok))
+        .files(glob::glob(&format!("{b2d_src}/**/*.cpp"))?.filter_map(
+            |f| f.ok().filter(|f|
+                f.as_os_str().to_str().is_some_and(|f| !f.contains("_test")))))
+        .flag("-fvisibility=hidden").flag("-fno-exceptions").flag("-fno-math-errno")
+        .flag("-fmerge-all-constants").flag("-ftree-vectorize").flag("-fno-rtti")
+        .flag("-fno-threadsafe-statics").include(b2d_src).include(jit_src)
+        .opt_level(3).define("NDEBUG", None).compile(module);
+        // https://blend2d.com/doc/build-instructions.html
+    //println!("cargo:rustc-link-lib=rt");
+
+    bgen.header(format!("{b2d_src}/blend2d.h")).blocklist_item("*Virt")
+        .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: true })
+        .default_non_copy_union_style(bindgen::NonCopyUnionStyle::ManuallyDrop)
+        .default_visibility(bindgen::FieldVisibilityKind::PublicCrate)
+        .derive_copy(false).derive_debug(false).merge_extern_blocks(true)
+        .allowlist_function("bl.*").allowlist_type("BL.*").layout_tests(false)
+        //.clang_args(["-x", "c++", "-std=c++17", &format!("-I{b2d_src}")])
+        //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .generate()?.write_to_file(path.join(format!("{module}.rs")))?;
+
+    Ok(())
+}
+
+#[cfg(feature = "b2d")] fn blend2d_simd(cc: &mut cc::Build) {
+    let compiler = cc.get_compiler();
+    if  compiler.is_like_msvc() { // refer to blend2d/CMakeLists.txt
+        let simd_flag = "-arch:AVX";
+        cc.is_flag_supported(simd_flag).is_ok_and(|bl| bl)
+            .then(|| cc.flag(simd_flag).define("BL_BUILD_OPT_AVX", None));
+
+        let simd_flag = "-arch:AVX512";
+        cc.is_flag_supported(simd_flag).is_ok_and(|bl| bl)
+            .then(|| cc.flag(simd_flag).define("BL_BUILD_OPT_AVX512", None));
+
+        let simd_flag = "-arch:AVX2";
+        if  cc.is_flag_supported(simd_flag).is_ok_and(|bl| bl) {
+            cc.flag(simd_flag).define("BL_BUILD_OPT_AVX2", None)
+            .define("__SSE3__", None).define("__SSSE3__", None)
+            .define("__SSE4_1__", None).define("__SSE4_2__", None);
+
+            // 64-bit MSVC compiler doesn't like -arch:SSE[2] as it's implicit.
+            std::env::var("TARGET").is_ok_and(|v|
+                !v.contains("x86_64")).then(|| cc.flag("-arch:SSE2"));
+        }
+    } else { // XXX: https://doc.rust-lang.org/std/arch/index.html
+        let simd_flag = "-mavx";
+        cc.is_flag_supported(simd_flag).is_ok_and(|yes| yes)
+            .then(|| cc.flag(simd_flag).define("BL_BUILD_OPT_AVX", None));
+
+        let simd_flag = "-mavx512bw";
+        if  cc.is_flag_supported(simd_flag).is_ok_and(|bl| bl) {
+            cc.flag(simd_flag).define("BL_BUILD_OPT_AVX512", None)
+                .flag("-mavx512dq").flag("-mavx512cd").flag("-mavx512vl");
+        }
+        let simd_flag = "-mavx2";
+        if  cc.is_flag_supported(simd_flag).is_ok_and(|bl| bl) {
+            cc.flag(simd_flag).define("BL_BUILD_OPT_AVX2", None).flag("-msse2")
+                .flag("-msse3").flag("-mssse3").flag("-msse4.1").flag("-msse4.2");
+        } else {
+            let simd_flag = "-mfpu=neon-vfpv4";
+            cc.is_flag_supported(simd_flag).is_ok_and(|bl| bl)
+                .then(|| cc.flag(simd_flag).define("BL_BUILD_OPT_ASIMD", None));
+        }
+
+        //if compiler.is_like_gnu() { cc.flag("-fno-semantic-interposition"); }
+    }
+}
+

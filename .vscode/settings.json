@@ -1,5 +1,6 @@
 {
     "C_Cpp.default.defines": [ "STANDALONE_",
 	"FALL_THROUGH=((void)0)", "FT_BEGIN_HEADER" ],
-    "C_Cpp.default.includePath": [ "3rdparty/evg", "3rdparty/ftg" ]
+    "C_Cpp.default.includePath": [ "3rdparty/evg", "3rdparty/ftg",
+	"3rdparty/blend2d/src", "3rdparty/asmjit/src" ]
 }
