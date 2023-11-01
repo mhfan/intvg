@@ -36,7 +36,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .write(true).create_new(true).open(path)?))?;
     } else if path.ends_with(".png") {
         if std::path::Path::new(&path).exists() { return Err("output file exists".into()) }
-        tvg.render(1.0)?.save_png(path)?;
+
+        let tnow = std::time::Instant::now();
+        let img = tvg.render(1.0)?;
+        //let img = intvg::render_evg::Render::render(&tvg, 1.0)?;
+        //let img = intvg::render_b2d::Render::render(&tvg, 1.0)?;
+        eprintln!("Rendering performance: {:.2} fps", 1.0 / tnow.elapsed().as_secs_f32());
+        img.save_png(path)?;
     } else { return Err("unknown output file extension".into()) }   Ok(())
 }
 
