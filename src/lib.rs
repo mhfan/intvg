@@ -3,6 +3,7 @@ pub mod tinyvg;
 pub mod render;
 pub mod convert;
 
+#[cfg(feature = "ovg")] pub mod openvg;
 #[cfg(feature = "b2d")] pub mod blend2d;
 #[cfg(feature = "evg")] pub mod gpac_evg;
 #[cfg(feature = "evg")] pub mod render_evg;

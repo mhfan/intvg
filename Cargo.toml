@@ -29,6 +29,8 @@ png = { version = "0.17", optional = true }
 #doctest = false
 
 [features]
+ovg = []
+
 b2d = []
 b2d_sfp = [ "b2d" ]
 

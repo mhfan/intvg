@@ -40,4 +40,6 @@ B2D_GIT=https://github.com/mhfan/blend2d # patch to use single precision floatin
 [ -e blend2d ] || git clone $B2D_GIT
 [ -e asmjit  ] || git clone https://github.com/asmjit/asmjit.git
 
+[ -e amanithvg ] || git clone https://github.com/Mazatech/amanithvg-sdk.git amanithvg
+
  # vim:sts=4 ts=8 sw=4 noet

@@ -20,6 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "ftg")] binding_ftg(&path)?;
     #[cfg(feature = "evg")] binding_evg(&path)?;
     #[cfg(feature = "b2d")] binding_b2d(&path)?;
+    #[cfg(feature = "ovg")] binding_ovg(&path)?;
 
     Ok(())
 }
@@ -171,5 +172,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         //if compiler.is_like_gnu() { cc.flag("-fno-semantic-interposition"); }
     }
+}
+
+#[cfg(feature = "ovg")] fn binding_ovg(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let ovg_dir = "3rdparty/amanithvg";
+
+    println!("cargo:rustc-link-lib=dylib=AmanithVG");
+    println!("cargo:rustc-link-search=native={ovg_dir}/lib/macosx/ub/sre/standalone");
+
+    //std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    // XXX: need to set environment variable before `cargo r/t`:
+    // DYLD_FALLBACK_LIBRARY_PATH=$PWD/3rdparty/amanithvg/lib/macosx/ub/sre/standalone
+
+    bindgen::builder().header(format!("{ovg_dir}/include/VG/vgext.h"))
+        .clang_arg(format!("-I{ovg_dir}/include"))
+        .derive_copy(false).derive_debug(false).merge_extern_blocks(true)
+        .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: true })
+        .allowlist_function("vg.*").allowlist_type("VG.*").layout_tests(false)
+        //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .generate()?.write_to_file(path.join("openvg.rs"))?;
+
+    Ok(())
 }
 
