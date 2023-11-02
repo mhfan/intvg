@@ -39,7 +39,12 @@ evg = [ "dep:png" ]
 #cc = [ "dep:cc", "dep:bindgen", "dep:glob" ]   # implied by optional dependency
 #default = [ "evg", "b2d" ]
 
+[[bench]]
+name = "engine_2d"
+harness = false
+
 [dev-dependencies]
+criterion = "0.5"
 #rexpect = "0.5"
 
 [build-dependencies]
