@@ -20,7 +20,7 @@ impl Display for ErrorKind {
     }
 }
 
-pub type Result<T> = std::result::Result<T, TVGError>;
+type Result<T> = std::result::Result<T, TVGError>;
 #[derive(Debug)] pub struct TVGError { kind: ErrorKind, msg: &'static str, }
 
 impl Display for TVGError {
@@ -83,8 +83,8 @@ pub struct Image<R,   W = std::io::BufWriter<std::fs::File>> {
 
 //impl<R: io::Read, W: io::Write> Default for Image<R, W> { fn default() -> Self { Self::new() } }
 
-impl<R: io::Read, W: io::Write> Image<R, W> {
-    #[allow(clippy::new_without_default)] pub fn new() -> Self { Self {
+impl<R: io::Read, W: io::Write> Image<R, W> { #[allow(clippy::new_without_default)]
+    pub(crate) fn new() -> Self { Self {
             header: Header { //magic: TVG_MAGIC, version: TVG_VERSION,
                 scale: 0, color_encoding: ColorEncoding::RGBA8888,
                 coordinate_range: CoordinateRange::Default,
@@ -93,7 +93,7 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
 
              read_range: Self::read_default, write_range: Self::write_default,
             _reader: PhantomData, _writer: PhantomData
-    }}
+    } }
 
     pub fn lookup_color(&self, idx: VarUInt) -> RGBA8888 { self.color_table[idx as usize] }
     pub fn push_color(&mut self, color: RGBA8888) -> VarUInt {
@@ -102,7 +102,9 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         } else { self.color_table.push(color);  self.color_table.len() as u32 - 1 }
     }
 
-    pub fn load(&mut self, reader: &mut R) -> Result<()> {
+    pub fn load_data(reader: &mut R) -> Result<Self> {
+        let mut tvgd = Self::new();
+
         let val = reader.read_u16_le()?;    if  val != TVG_MAGIC {
             return Err(TVGError { kind: ErrorKind::InvalidData(val as u8),
                 msg: "incorrect magic number" });
@@ -111,36 +113,40 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
             return Err(TVGError { kind: ErrorKind::InvalidData(val), msg: "incorrect version" });
         }
 
-        let val = reader.read_u8()?;   self.header.scale = val & 0x0F;
-        // TODO: scale rendering by change self.header.scale?
+        let val = reader.read_u8()?;   tvgd.header.scale = val & 0x0F;
+        // TODO: scale rendering by change tvgd.header.scale?
 
-        self.header.coordinate_range = match val >> 6 {
-            0 => { self.read_range = Self::read_default;  CoordinateRange::Default  }
-            1 => { self.read_range = Self::read_reduced;  CoordinateRange::Reduced  }
-            2 => { self.read_range = Self::read_enhanced; CoordinateRange::Enhanced }
+        tvgd.header.coordinate_range = match val >> 6 {
+            0 => { //tvgd.write_range = Self::write_default;
+                   //tvgd. read_range = Self:: read_default;
+                                                            CoordinateRange::Default  }
+            1 => { tvgd.write_range = Self::write_reduced;
+                   tvgd. read_range = Self:: read_reduced;  CoordinateRange::Reduced  }
+            2 => { tvgd.write_range = Self::write_enhanced;
+                   tvgd. read_range = Self:: read_enhanced; CoordinateRange::Enhanced }
             x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
                 msg: "unsupported color encoding" })
-        };
+        };  assert!(tvgd.commands.is_empty() && tvgd.color_table.is_empty());
 
-        self.header.width  = (self.read_range)(reader)? as u32;
-        self.header.height = (self.read_range)(reader)? as u32;
+        tvgd.header.width  = (tvgd.read_range)(reader)? as u32;
+        tvgd.header.height = (tvgd.read_range)(reader)? as u32;
         let color_count = reader.read_var_uint()?;
 
-        self.color_table.reserve_exact(color_count as usize);
-        self.header.color_encoding = match (val >> 4) & 0x03 {  // XXX: unified to RGBA8888
-            0 => { for _ in 0..color_count { self.color_table.push(RGBA8888 {
+        tvgd.color_table.reserve_exact(color_count as usize);
+        tvgd.header.color_encoding = match (val >> 4) & 0x03 {  // XXX: unified to RGBA8888
+            0 => { for _ in 0..color_count { tvgd.color_table.push(RGBA8888 {
                     r: reader.read_u8()?, g: reader.read_u8()?,
                     b: reader.read_u8()?, a: reader.read_u8()?,
                 })} ColorEncoding::RGBA8888
             }
 
             1 => { for _ in 0..color_count { let val = reader.read_u16_le()?;
-                self.color_table.push(RGBA8888 {    r: ((val & 0x001F) << 3) as u8,
+                tvgd.color_table.push(RGBA8888 {    r: ((val & 0x001F) << 3) as u8,
                     g: ((val & 0x07E0) >> 3) as u8, b: ((val & 0xF800) >> 8) as u8, a: 255,
                 })} ColorEncoding::RGB565
             }
 
-            2 => { for _ in 0..color_count { self.color_table.push(RGBA8888 {
+            2 => { for _ in 0..color_count { tvgd.color_table.push(RGBA8888 {
                     r: (reader.read_f32_le()? * 255.0 + 0.5) as u8,
                     g: (reader.read_f32_le()? * 255.0 + 0.5) as u8,
                     b: (reader.read_f32_le()? * 255.0 + 0.5) as u8,
@@ -150,13 +156,13 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
 
             x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
                     msg: "custom color encoding is not supported" }) //ColorEncoding::Custom,
-        };  eprintln!("{:?}", &self.header);
+        };  eprintln!("{:?}", &tvgd.header);
 
-        loop {  let cmd = self.read_command(reader)?;
+        loop {  let cmd = tvgd.read_command(reader)?;
             if let Command::EndOfDocument = cmd {
-                reader.read_to_end(&mut self.trailer)?; break
-            }   self.commands.push(cmd);
-        }   Ok(())
+                reader.read_to_end(&mut tvgd.trailer)?; break
+            }   tvgd.commands.push(cmd);
+        }    Ok(tvgd)
     }
 
     fn read_command(&self, reader: &mut R) -> Result<Command> {
@@ -254,12 +260,12 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
                 4 => {  let val = reader.read_u8()?;    SegInstr::ArcCircle {
                         large: 0 < val & 0x01, sweep: 0 < val & 0x02,
                         radius:   self.read_unit(reader)?, target: self.read_point(reader)?
-                }}
+                } }
                 5 => {  let val = reader.read_u8()?;    SegInstr::ArcEllipse {
                         large: 0 < val & 0x01, sweep: 0 < val & 0x02,
                         radius:  (self.read_unit(reader)?, self.read_unit(reader)?),
                         rotation: self.read_unit(reader)?, target: self.read_point(reader)?
-                }}
+                } }
 
                 6 => SegInstr::ClosePath,
                 7 => SegInstr::QuadBezier {
@@ -276,11 +282,11 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
             1 => { Style::LinearGradient {
                     points: (self.read_point(reader)?, self.read_point(reader)?),
                     cindex: (reader.read_var_uint()?, reader.read_var_uint()?),
-            }}
+            } }
             2 => { Style::RadialGradient {
                     points: (self.read_point(reader)?, self.read_point(reader)?),
                     cindex: (reader.read_var_uint()?, reader.read_var_uint()?),
-            }}
+            } }
             x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
                     msg: "unsupported primary style" })
         })
@@ -314,16 +320,10 @@ impl<R: io::Read, W: io::Write> Image<R, W> {
         Ok((self.read_range)(reader)? as f32 / (1u32 << self.header.scale) as f32)
     }
 
-    pub fn save(&mut self, writer: &mut W) -> Result<()> {
+    pub fn save_data(&self, writer: &mut W) -> Result<()> {
         writer.write_u16_le(TVG_MAGIC)?;    writer.write_u8(TVG_VERSION)?;
         writer.write_u8((self.header.coordinate_range as u8) << 6 |
                         (self.header.color_encoding   as u8) << 4 | self.header.scale)?;
-
-        self.write_range = match self.header.coordinate_range {
-            CoordinateRange::Default  => Self::write_default,
-            CoordinateRange::Reduced  => Self::write_reduced,
-            CoordinateRange::Enhanced => Self::write_enhanced,
-        };
 
         (self.write_range)(writer, self.header.width  as i32)?;
         (self.write_range)(writer, self.header.height as i32)?;

@@ -8,17 +8,11 @@
  use criterion::{criterion_group, criterion_main, Criterion};
 
  fn bench_engine_2d(c: &mut Criterion) {
-    use usvg::{TreeParsing, TreeTextToPath};
     use intvg::{tinyvg::TVGImage, render::Render, convert::Convert};
     let mut group = c.benchmark_group("calc24");
     group.sample_size(10);
 
-    let mut fontdb = usvg::fontdb::Database::new();
-    fontdb.load_system_fonts();
-
-    let mut tree = usvg::Tree::from_data(&std::fs::read("data/tiger.svg").unwrap(),
-        &usvg::Options::default()).unwrap();    tree.convert_text(&fontdb);
-    let tvg = TVGImage::from_usvg(&tree);
+    let tvg = TVGImage::from_svgf("data/tiger.svg").unwrap();
 
     group.bench_function("tiny_skia", |b| b.iter(|| tvg.render(1.0)));
     #[cfg(feature = "evg")] group.bench_function("GPAC/EVG",

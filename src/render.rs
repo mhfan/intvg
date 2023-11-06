@@ -18,7 +18,7 @@ impl Render for TVGImage {  // TODO: to render with femtovg?
         let err_msg = "Fail to build path";
 
         impl From<Rect> for skia::Rect {
-            fn from(r: Rect) -> Self { unsafe { std::mem::transmute(r) }}
+            fn from(r: Rect) -> Self { unsafe { std::mem::transmute(r) } }
             //fn from(r: Rect) -> Self { skia::Rect::from_ltrb(r.l, r.t, r.r, r.b).unwrap() }
             //fn from(r: Rect) -> Self { skia::Rect::from_xywh(r.x, r.y, r.w, r.h).unwrap() }
         }

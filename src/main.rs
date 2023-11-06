@@ -16,15 +16,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }   // all unwrap are safe
 
     let mut path = args.nth(1).unwrap();
-    let mut tvg = if path.ends_with(".svg") {
-        use usvg::{TreeParsing, TreeTextToPath};
-        let mut tree = usvg::Tree::from_data(&fs::read(&path)?, &usvg::Options::default())?;
-        let mut fontdb = usvg::fontdb::Database::new();
-        fontdb.load_system_fonts();     tree.convert_text(&fontdb);
-        TVGImage::from_usvg(&tree)
+    let tvg = if path.ends_with(".svg") { TVGImage::from_svgf(&path)?
     } else if path.ends_with(".tvg") {
-        let mut tvg = TVGImage::new();
-        tvg.load(&mut BufReader::new(File::open(&path)?))?;     tvg
+        TVGImage::load_data(&mut BufReader::new(File::open(&path)?))?
     } else { return Err("only .svg & .tvg file is supported".into()) };
 
     if 2 < cnt { path = args.next().unwrap(); } else {
@@ -32,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if  path.ends_with(".tvg") {
-        tvg.save(&mut BufWriter::new(fs::OpenOptions::new()
+        tvg.save_data(&mut BufWriter::new(fs::OpenOptions::new()
             .write(true).create_new(true).open(path)?))?;
     } else if path.ends_with(".png") {
         if std::path::Path::new(&path).exists() { return Err("output file exists".into()) }
