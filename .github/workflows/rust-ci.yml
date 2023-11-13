@@ -71,9 +71,9 @@ jobs:
     #  uses: taiki-e/install-action@nextest
       run: cargo test -- --color always --nocapture #cargo nextest r
 
-    #- name: Benchmark
-    #  run: cargo bench
-    #  #  sudo cargo flamegraph --bench calc24_bench
+    - name: Benchmark
+      run: cargo bench
+      #  sudo cargo flamegraph --bench engine_2d
 
     #- name: Publish to crates-io
     #  uses: katyo/publish-crates@v2

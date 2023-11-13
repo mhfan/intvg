@@ -50,8 +50,8 @@ env = { "CODECOV_TOKEN" = "b24b2436-512a-461e-9947-488213b27add" }
 
 [tasks.bench-fg]    # https://github.com/flamegraph-rs/flamegraph
 #command = "cargo"
-#args = [ "flamegraph", "--bench", "calc24_bench" ]
-script = [ "sudo cargo flamegraph --bench calc24_bench" ]
+#args = [ "flamegraph", "--bench", "engine_2d" ]
+script = [ "sudo cargo flamegraph --bench engine_2d" ]
 
 [tasks.bench-mem]
 command = "cargo"   # cargo bench --features dhat-heap
