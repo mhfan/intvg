@@ -2,5 +2,8 @@
     "C_Cpp.default.defines": [ "STANDALONE_",
 	"FALL_THROUGH=((void)0)", "FT_BEGIN_HEADER" ],
     "C_Cpp.default.includePath": [ "3rdparty/evg", "3rdparty/ftg",
+	"3rdparty/micro-gl/include/microgl/micro-alloc/include",
+	"3rdparty/micro-gl/include/microgl/micro-tess/include",
+	"3rdparty/micro-gl/include",
 	"3rdparty/blend2d/src", "3rdparty/asmjit/src" ]
 }

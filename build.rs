@@ -21,6 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "evg")] binding_evg(&path)?;
     #[cfg(feature = "b2d")] binding_b2d(&path)?;
     #[cfg(feature = "ovg")] binding_ovg(&path)?;
+    #[cfg(feature = "ugl")] binding_ugl(&path)?;
 
     Ok(())
 }
@@ -196,6 +197,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ovg_dir.push("ub"); ovg_dir.push("sre"); ovg_dir.push("standalone");
     println!("cargo:rustc-link-search=native={}", ovg_dir.display());
     println!("cargo:rustc-link-lib=dylib=AmanithVG");
+
+    Ok(())
+}
+
+#[cfg(feature = "ugl")] fn binding_ugl(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let ugl_inc = Path::new("3rdparty").join("micro-gl").join("include");
+    let module = "microgl";
+
+    let mut ugl_cpp = Path::new("src").join(module).with_extension("cpp");
+    cc::Build::new().cpp(true).flag("-std=c++17").file(&ugl_cpp)
+        .flag("-Wno-unused-parameter").flag("-Wno-unused").flag("-Wno-sign-compare")
+        .include(&ugl_inc).opt_level(3).define("NDEBUG", None).compile(module);
+    println!("cargo:rerun-if-changed={}", ugl_cpp.display());
+
+    ugl_cpp.set_extension("h");
+    bindgen::builder().header(ugl_cpp.to_string_lossy()).opaque_type("(canvas|path)_t")
+        .clang_args(["-x", "c++", "-std=c++17", &format!("-I{}", ugl_inc.display())])
+        .derive_copy(false).derive_debug(false).merge_extern_blocks(true)
+        .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: true })
+        .allowlist_function("(canvas|path).*").layout_tests(false)
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .generate()?.write_to_file(path.join(format!("{module}.rs")))?;
 
     Ok(())
 }

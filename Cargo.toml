@@ -37,6 +37,7 @@ femtovg = { version = "0.8", optional = true }
 
 [features]
 ovg = []
+ugl = []
 
 b2d = []
 b2d_sfp = [ "b2d" ]

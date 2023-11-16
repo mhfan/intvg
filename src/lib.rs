@@ -9,6 +9,11 @@ pub mod convert;
 #[cfg(feature = "evg")] pub mod render_evg;
 #[cfg(feature = "b2d")] pub mod render_b2d;
 
+#[cfg(feature = "ugl")] pub mod microgl {   pub use ugl_ffi::*;
+     #[allow(non_camel_case_types)] #[allow(non_upper_case_globals)] //#[allow(non_snake_case)]
+    mod ugl_ffi { include!(concat!(env!("OUT_DIR"), "/microgl.rs")); }
+}
+
 /*  TODO: https://github.com/sammycage/plutovg
     https://github.com/kiba/SDL_svg/blob/master/ftgrays.c
     https://github.com/Samsung/rlottie/tree/master/src/vector/freetype
