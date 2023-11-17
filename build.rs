@@ -1,5 +1,5 @@
 
-use std::path::Path;
+use std::{env, path::Path};
 
 //  https://doc.rust-lang.org/stable/cargo/reference/build-scripts.html
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed={}", Path::new(".git").join("index").display());
 
     //std::process::Command::new(Path::new("3rdparty").join("layout.sh")).status()?;
-    #[allow(unused)] let path = std::path::PathBuf::from(std::env::var("OUT_DIR")?);
+    #[allow(unused)] let path = std::path::PathBuf::from(env::var("OUT_DIR")?);
     #[cfg(feature = "ftg")] binding_ftg(&path)?;
     #[cfg(feature = "evg")] binding_evg(&path)?;
     #[cfg(feature = "b2d")] binding_b2d(&path)?;
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .define("FALL_THROUGH", "((void)0)").file(ftg_dir.join("ftgrays.c"))
         .files(glob::glob(&format!("{}/stroke/*.c", ftg_dir.display()))?
             .filter_map(Result::ok)).file(ftg_dir.join("ftraster.c"))
-        .flag("-Wno-unused-variable").flag("-Wno-unused-function")
+        .flag("-Wno-unused").flag("-Wno-implicit-fallthrough")
         .opt_level(3).define("NDEBUG", None).compile(module);
 
     // The bindgen::Builder is the main entry point to bindgen,
@@ -76,6 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     cc.flag("-std=c17").flag("-Wno-pointer-sign").define("GPAC_DISABLE_LOG", None)
         .flag("-Wno-unused-parameter").define("GPAC_DISABLE_THREADS", None)
+        .flag("-Wno-implicit-fallthrough").flag("-Wno-unused")
         .files(glob::glob(&format!("{}/*.c",
             evg_dir.display()))?.filter_map(Result::ok))
         .include(&evg_dir).opt_level(3).define("NDEBUG", None).compile(module);
@@ -103,14 +104,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "b2d_sfp")] { //println!("cargo:rustc-cfg=feature=\"b2d_sfp\"");
         #[cfg(target_arch = "aarch64")] cc.flag("-mno-outline-atomics");
         cc.define("BLEND2D_NO_DFP",  None).flag("-fsingle-precision-constant")
-          .define("BL_BUILD_NO_TLS", None).flag("-Wno-maybe-uninitialized").compiler("g++-13");
+          .define("BL_BUILD_NO_TLS", None).flag("-Wno-uninitialized").compiler("g++-13");
         bgen = bgen.clang_arg("-DBLEND2D_NO_DFP");
     }   blend2d_simd(&mut cc);
 
     cc.cpp(true).flag("-std=c++17").define("ASMJIT_EMBED", None)
         .define("ASMJIT_NO_STDCXX", None).define("ASMJIT_NO_FOREIGN", None)
         .files(glob::glob(&format!("{}/**/*.cpp",
-            jit_src.display()))?.filter_map(Result::ok))
+            jit_src.display()))?.filter_map(Result::ok)).flag("-Wno-uninitialized")
         .files(glob::glob(&format!("{}/**/*.cpp",
             b2d_src.display()))?.filter_map(|f| f.ok().filter(|f|
                 f.as_os_str().to_str().is_some_and(|f| !f.contains("_test")))))
@@ -148,7 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .define("__SSE4_1__", None).define("__SSE4_2__", None);
 
                 // 64-bit MSVC compiler doesn't like -arch:SSE[2] as it's implicit.
-                std::env::var("TARGET").is_ok_and(|v|
+                env::var("TARGET").is_ok_and(|v|
                     !v.contains("x86_64")).then(|| cc.flag("-arch:SSE2"));
             }
         } else { // XXX: https://doc.rust-lang.org/std/arch/index.html
@@ -181,7 +182,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(feature = "ovg")] fn binding_ovg(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut ovg_dir = Path::new("3rdparty").join("amanithvg").join("include");
 
-    //std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    //env::var("CARGO_MANIFEST_DIR").unwrap()
     // XXX: need to set environment variable before `cargo r/t`:
     // DYLD_FALLBACK_LIBRARY_PATH=$PWD/3rdparty/amanithvg/lib/macosx/ub/sre/standalone
 
@@ -193,8 +194,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()?.write_to_file(path.join("openvg.rs"))?;
 
-    ovg_dir.pop(); ovg_dir.push("lib"); ovg_dir.push(std::env::consts::OS);
-    ovg_dir.push("ub"); ovg_dir.push("sre"); ovg_dir.push("standalone");
+    ovg_dir.pop(); ovg_dir.push("lib"); ovg_dir.push(env::consts::OS); //ovg_dir.push("ub");
+    ovg_dir.push(env::consts::ARCH); ovg_dir.push("sre"); ovg_dir.push("standalone");
     println!("cargo:rustc-link-search=native={}", ovg_dir.display());
     println!("cargo:rustc-link-lib=dylib=AmanithVG");
 
@@ -208,6 +209,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ugl_cpp = Path::new("src").join(module).with_extension("cpp");
     cc::Build::new().cpp(true).flag("-std=c++17").file(&ugl_cpp)
         .flag("-Wno-unused-parameter").flag("-Wno-unused").flag("-Wno-sign-compare")
+        .flag("-Wno-deprecated-copy").flag("-Wno-uninitialized")
+        .flag("-Wno-reorder").flag("-Wno-misleading-indentation")
         .include(&ugl_inc).opt_level(3).define("NDEBUG", None).compile(module);
     println!("cargo:rerun-if-changed={}", ugl_cpp.display());
 

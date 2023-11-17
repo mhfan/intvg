@@ -49,7 +49,7 @@ evg = [ "dep:png" ]
 nvg = [ "femtovg", "glutin", "winit", "glutin-winit", "raw-window-handle", "dep:png" ]
 
 #cc = [ "dep:cc", "dep:bindgen", "dep:glob" ]   # implied by optional dependency
-#default = [ "evg", "b2d" ]
+#default = [ "evg", "b2d" ] # XXX: ftg/ovg/nvg/ugl not completely work yet
 
 [[bin]]
 name = "nanovg"

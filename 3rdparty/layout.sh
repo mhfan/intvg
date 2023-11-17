@@ -40,6 +40,7 @@ B2D_GIT=https://github.com/mhfan/blend2d # patch to use single precision floatin
 
 [ -e micro-gl  ] || git clone https://github.com/micro-gl/micro-gl.git
 
-[ -e amanithvg ] || { git clone https://github.com/Mazatech/amanithvg-sdk.git amanithvg && ln -s macosx amanithvg/lib/macos; }
+[ -e amanithvg ] || { git clone https://github.com/Mazatech/amanithvg-sdk.git amanithvg &&
+    ln -s macosx amanithvg/lib/macos && ln -s ub amanithvg/lib/macos/aarch64; }
 
  # vim:sts=4 ts=8 sw=4 noet

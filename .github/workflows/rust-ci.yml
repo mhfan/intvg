@@ -26,6 +26,7 @@ jobs:
     #      - stable
     #      - nightly
     #
+    #    compiler: [gcc, clang]
     #    build: [linux, macos, windows]
     #    include:
     #      - build: linux
@@ -67,12 +68,18 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
+    - run: 3rdparty/layout.sh
+
     - name: Run tests
     #  uses: taiki-e/install-action@nextest
-      run: cargo test -- --color always --nocapture #cargo nextest r
+      run: cargo t -F "evg,b2d,ftg,ovg,nvg,ugl" -- --nocapture #cargo nextest r
+      env: # DYLD_FALLBACK_LIBRARY_PATH (macOS), PATH (Windows) # XXX:
+        LD_LIBRARY_PATH: ${{github.workspace}}/3rdparty/amanithvg/lib/linux/x86_64/sre/standalone
 
     - name: Benchmark
-      run: cargo bench
+      run: |
+        cargo bench -F "evg_fixed" # "b2d_sfp" not yet supported in x86_64
+        cargo bench -F "evg,b2d" # --all-features
       #  sudo cargo flamegraph --bench engine_2d
 
     #- name: Publish to crates-io
