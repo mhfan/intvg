@@ -1,11 +1,11 @@
 
 use crate::tinyvg::*;
 use crate::gpac_evg::*;
-use std::result::Result;
+use std::{io, result::Result};
 
 pub trait Render { fn render(&self, scale: f32) -> Result<Pixmap, &str>; }
 
-impl Render for TVGImage {
+impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
     fn render(&self, scale: f32) -> Result<Pixmap, &str> {
         let mut pixm = Pixmap::new(
             (self.header.width  as f32 * scale).ceil() as _,
@@ -159,14 +159,14 @@ fn process_segcmd(path: &VGPath, cmd: &SegInstr) {
     }
 }
 
-fn style_to_stencil(img: &TVGImage, style: &Style, ts: &GF_Matrix2D) ->
-    Result<Stencil, &'static str> { use crate::gpac_evg::GF_StencilType::*;
+fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
+    style: &Style, ts: &GF_Matrix2D) -> Result<Stencil, &'static str> {
     impl From<RGBA8888> for GF_Color {
         fn from(color: RGBA8888) -> Self { // convert to 0xAARRGGBB
             (color.a as u32) << 24 | (color.r as u32) << 16 |
             (color.g as u32) <<  8 |  color.b as u32
         }
-    }
+    }   use crate::gpac_evg::GF_StencilType::*;
 
     Ok(match style {
         Style::FlatColor(idx) => {

@@ -1,17 +1,17 @@
 
 use crate::tinyvg::*;
 use usvg::tiny_skia_path as skia;
-use std::{path::Path, fs, error::Error};
+use std::{path::Path, error::Error, io};
 
 pub trait Convert { fn from_svgf<P: AsRef<Path>>(file: P) ->
     Result<Self, Box<dyn Error>> where Self: std::marker::Sized;
 }
 
-impl Convert for TVGImage {
+impl<R: io::Read, W: io::Write> Convert for TinyVG<R, W> {
     fn from_svgf<P: AsRef<Path>>(file: P) -> Result<Self, Box<dyn Error>> {
         use usvg::{TreeParsing, TreeTextToPath};
         let mut fontdb = usvg::fontdb::Database::new();     fontdb.load_system_fonts();
-        let mut tree = usvg::Tree::from_data(&fs::read(&file)?,
+        let mut tree = usvg::Tree::from_data(&std::fs::read(&file)?,
             &usvg::Options::default())?;    tree.convert_text(&fontdb);
 
         //Ok(Self::from_usvg(&tree)) }
@@ -38,7 +38,8 @@ impl Convert for TVGImage {
     }
 }
 
-fn convert_children(tvg: &mut TVGImage, parent: &usvg::Node, trans: usvg::Transform) {
+fn convert_children<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
+    parent: &usvg::Node, trans: usvg::Transform) {
     for child in parent.children() {
         match *child.borrow() {
             usvg::NodeKind::Group(ref g) =>
@@ -72,6 +73,11 @@ fn convert_children(tvg: &mut TVGImage, parent: &usvg::Node, trans: usvg::Transf
 }
 
 fn convert_path_segment(path: &skia::Path) -> Vec<Segment> {
+    #[allow(clippy::from_over_into)] impl Into<Point> for skia::Point {
+        fn into(self) -> Point { unsafe { std::mem::transmute(self) } }
+        //fn into(self) -> Point { Point { x: self.x, y: self.y } }
+    }
+
     let (mut coll, mut cmds) = (vec![], vec![]);
     let  mut start = Point { x: 0.0, y: 0.0 };
     for seg in path.segments() {
@@ -91,13 +97,8 @@ fn convert_path_segment(path: &skia::Path) -> Vec<Segment> {
     }   if !cmds.is_empty() { coll.push(Segment { start, cmds }); }     coll
 }
 
-#[allow(clippy::from_over_into)] impl Into<Point> for skia::Point {
-    fn into(self) -> Point { unsafe { std::mem::transmute(self) } }
-    //fn into(self) -> Point { Point { x: self.x, y: self.y } }
-}
-
-fn convert_paint(tvg: &mut TVGImage, paint: &usvg::Paint,
-    opacity: usvg::Opacity, bbox: usvg::Rect) -> Option<Style> {
+fn convert_paint<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
+    paint: &usvg::Paint, opacity: usvg::Opacity, bbox: usvg::Rect) -> Option<Style> {
     fn gradient_transform(grad: &usvg::BaseGradient,
         bbox: usvg::Rect) -> Option<usvg::Transform> {
         if grad.units == usvg::Units::ObjectBoundingBox {
@@ -109,19 +110,16 @@ fn convert_paint(tvg: &mut TVGImage, paint: &usvg::Paint,
         } else { Some(grad.transform) }
     }
 
-    fn convert_stop_color(tvg: &mut TVGImage, stop: &usvg::Stop,
-        opacity: usvg::Opacity) -> u32 {    let color = stop.color;
-        let color = RGBA8888 { r: color.red, g: color.green,
-            b: color.blue, a: (stop.opacity * opacity).to_u8() };
-        tvg.push_color(color)
-    }
+    let get_color = |stop: &usvg::Stop| -> RGBA8888 {
+        RGBA8888 {  r: stop.color.red,  g:  stop.color.green,
+                    b: stop.color.blue, a: (stop.opacity * opacity).to_u8() }
+    };
 
     match paint { usvg::Paint::Pattern(_) => {
             eprintln!("pattern painting is not supported"); None },
         usvg::Paint::Color(color) => {
-            let color = RGBA8888 { r: color.red, g: color.green,
-                b: color.blue, a: opacity.to_u8() };
-            Some(Style::FlatColor(tvg.push_color(color)))
+            Some(Style::FlatColor(tvg.push_color(RGBA8888 { r: color.red,
+                g: color.green, b: color.blue, a: opacity.to_u8() })))
         }
         usvg::Paint::LinearGradient(grad) => {
             let ts = gradient_transform(grad, bbox)?;
@@ -129,8 +127,8 @@ fn convert_paint(tvg: &mut TVGImage, paint: &usvg::Paint,
             let mut p2 = (grad.x2, grad.y2).into();
             ts.map_point(&mut p1);  ts.map_point(&mut p2);
 
-            let c1 = convert_stop_color(tvg, &grad.stops[0], opacity);
-            let c2 = convert_stop_color(tvg, &grad.stops[1], opacity);
+            let c1 = tvg.push_color(get_color(&grad.stops[0]));
+            let c2 = tvg.push_color(get_color(&grad.stops[1]));
             Some(Style::LinearGradient { points: (p1.into(), p2.into()), cindex: (c1, c2) })
         }
         usvg::Paint::RadialGradient(grad) => {
@@ -140,8 +138,8 @@ fn convert_paint(tvg: &mut TVGImage, paint: &usvg::Paint,
             let mut p2 = (grad.cx, grad.cy + grad.r.get()).into();
             ts.map_point(&mut p1);  ts.map_point(&mut p2);
 
-            let c1 = convert_stop_color(tvg, &grad.stops[0], opacity);
-            let c2 = convert_stop_color(tvg, &grad.stops[1], opacity);
+            let c1 = tvg.push_color(get_color(&grad.stops[0]));
+            let c2 = tvg.push_color(get_color(&grad.stops[1]));
             Some(Style::RadialGradient { points: (p1.into(), p2.into()), cindex: (c1, c2) })
         }
     }

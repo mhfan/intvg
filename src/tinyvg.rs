@@ -1,9 +1,8 @@
 
 //pub mod TinyVG {
 
-use std::{io, fmt::{self, Display, Formatter}, marker::PhantomData};
+use std::{io, num::TryFromIntError, fmt::{self, Display, Formatter}/*, marker::PhantomData*/};
 //use byteorder::{ReadBytesExt, WriteBytesExt, LE};
-use std::num::TryFromIntError;
 
 #[derive(Debug)] pub enum ErrorKind {   IO(io::Error), IntError(TryFromIntError),
     InvalidData(u8), OutOfRange, //BadPosition, Fatal,
@@ -68,8 +67,11 @@ impl From<TryFromIntError> for TVGError {
 //  Thus, this can be used to encode some more elements with less bytes.
 //  If this is the case, this is signaled by the use of value+1.
 
-pub type TVGImage = Image<std::io::BufReader<std::fs::File>>;
-pub struct Image<R,   W = std::io::BufWriter<std::fs::File>> {
+pub type TVGBuf<'a> = TinyVG<io::Cursor<&'a [u8]>, io::Cursor<Vec<u8>>>;
+pub type TVGFile = TinyVG<io::BufReader<std::fs::File>, io::BufWriter<std::fs::File>>;
+pub type TVGImage = TVGFile;
+
+pub struct TinyVG<R: io::Read, W: io::Write> {
     pub header: Header,     // In-memory representation of a TinyVG file
     color_table:  Vec<RGBA8888>,    // colors used in this image
     pub commands: Vec<Command>,     // commands required to render this image
@@ -78,12 +80,12 @@ pub struct Image<R,   W = std::io::BufWriter<std::fs::File>> {
 
     write_range: fn(&mut W, i32) -> Result<()>,
      read_range: fn(&mut R) ->  io::Result<i32>,
-    _reader: PhantomData<R>, _writer: PhantomData<W>,
+    //_reader: PhantomData<R>, _writer: PhantomData<W>,
 }
 
 //impl<R: io::Read, W: io::Write> Default for Image<R, W> { fn default() -> Self { Self::new() } }
 
-impl<R: io::Read, W: io::Write> Image<R, W> { #[allow(clippy::new_without_default)]
+impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_default)]
     pub(crate) fn new() -> Self { Self {
             header: Header { //magic: TVG_MAGIC, version: TVG_VERSION,
                 scale: 0, color_encoding: ColorEncoding::RGBA8888,
@@ -92,7 +94,7 @@ impl<R: io::Read, W: io::Write> Image<R, W> { #[allow(clippy::new_without_defaul
             },  color_table: vec![], commands: vec![], trailer: vec![],
 
              read_range: Self::read_default, write_range: Self::write_default,
-            _reader: PhantomData, _writer: PhantomData
+            //_reader: PhantomData, _writer: PhantomData,
     } }
 
     pub fn lookup_color(&self, idx: VarUInt) -> RGBA8888 { self.color_table[idx as usize] }

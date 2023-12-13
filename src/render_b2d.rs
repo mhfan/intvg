@@ -7,11 +7,11 @@
 
 use crate::tinyvg::*;
 use crate::blend2d::*;
-use std::result::Result;
+use std::{io, result::Result};
 
 pub trait Render { fn render(&self, scale: f32) -> Result<BLImage, &str>; }
 
-impl Render for TVGImage {
+impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
     fn render(&self, scale: f32) -> Result<BLImage, &str> {
         let mut img = BLImage::new(
             (self.header.width  as f32 * scale).ceil() as _,
@@ -161,8 +161,8 @@ fn process_segcmd(path: &mut BLPath, cmd: &SegInstr) {
     }
 }
 
-fn convert_style(img: &TVGImage, style: &Style, scale: f32) ->
-    Result<Box<dyn B2DStyle>, &'static str> {
+fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
+    style: &Style, scale: f32) -> Result<Box<dyn B2DStyle>, &'static str> {
     impl From<RGBA8888> for BLRgba32 {
         fn from(color: RGBA8888) -> Self { Self { value: // convert to 0xAARRGGBB
             (color.a as u32) << 24 | (color.r as u32) << 16 |

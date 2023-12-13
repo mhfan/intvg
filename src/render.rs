@@ -1,11 +1,11 @@
 
 use crate::tinyvg::*;
 use tiny_skia as skia;
-use std::result::Result;
+use std::{io, result::Result};
 
 pub trait Render { fn render(&self, scale: f32) -> Result<skia::Pixmap, &str>; }
 
-impl Render for TVGImage {  // TODO: to render with femtovg?
+impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
     fn render(&self, scale: f32) -> Result<skia::Pixmap, &str> {
         let mut pixmap = skia::Pixmap::new(
             (self.header.width  as f32 * scale).ceil() as _,
@@ -167,7 +167,8 @@ fn process_segcmd(pb: &mut skia::PathBuilder, cmd: &SegInstr) {
     }
 }
 
-fn style_to_paint<'a>(img: &TVGImage, style: &Style, ts: skia::Transform) ->
+fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
+    style: &Style, ts: skia::Transform) ->
     Result<skia::Paint<'a>, &'static str> {
     impl From<RGBA8888> for skia::Color {  // XXX: why not use ColorU8 defaultly in skia?
         fn from(c: RGBA8888) -> Self { Self::from_rgba8(c.r, c.g, c.b, c.a) }
