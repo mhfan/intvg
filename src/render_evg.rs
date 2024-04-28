@@ -36,16 +36,13 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 }
                 Command::FillRects(FillCMD { fill, coll }) => {
                     let sten = style_to_stencil(self, fill, &ts);
-                    coll.iter().for_each(|rect| { path.add_rect(rect.into());
-                        surf.fill_path(&path, &sten);    path.reset();
-                    });
+                    coll.iter().for_each(|rect| path.add_rect(rect.into()));
+                    surf.fill_path(&path, &sten);    //path.reset();
                 }
                 Command::FillPath (FillCMD { fill, coll }) => {
                     let sten = style_to_stencil(self, fill, &ts);
-                    for seg in coll {   let _ = segment_to_path(seg, &path);
-                        //if res { return Err("Got line width in fill path segment") }
-                        surf.fill_path(&path, &sten);    path.reset();
-                    }
+                    for seg in coll { let _ = segment_to_path(seg, &path); }
+                    surf.fill_path(&path, &sten);    //path.reset();
                 }
                 Command::DrawLines(DrawCMD { line, lwidth, coll }) => {
                     coll.iter().for_each(|line| {
@@ -63,8 +60,8 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 }
                 Command::DrawPath (DrawCMD {
                     line, lwidth, coll }) => {
-                    pens.width = (*lwidth).into();
                     let sten = style_to_stencil(self, line, &ts);
+                    pens.width = (*lwidth).into();
 
                     for seg in coll {
                         stroke_segment_path(seg, &surf, &sten, &mut pens); }
@@ -86,23 +83,22 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     let paint = style_to_stencil(self, fill, &ts);
                     let pline = style_to_stencil(self, line, &ts);
 
-                    coll.iter().for_each(|rect| {   path.add_rect(rect.into());
-                        surf.  fill_path(&path, &paint);
-                        surf.stroke_path(&path, &pline, &pens);     path.reset();
-                    });
+                    coll.iter().for_each(|rect| path.add_rect(rect.into()));
+                    surf.  fill_path(&path, &paint);
+                    surf.stroke_path(&path, &pline, &pens);     //path.reset();
                 }
                 Command::OutlinePath (fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    pens.width = (*lwidth).into();
                     let paint = style_to_stencil(self, fill, &ts);
                     let pline = style_to_stencil(self, line, &ts);
 
-                    for seg in coll {   let res = segment_to_path(seg, &path);
-                        surf.fill_path(&path, &paint);
+                    pens.width = (*lwidth).into();  let mut res = false;
+                    for seg in coll { res = segment_to_path(seg, &path); }
+                    surf.fill_path(&path, &paint);
 
-                        if res { stroke_segment_path(seg, &surf, &pline, &mut pens);
-                        } else { surf.stroke_path(&path, &pline, &pens); }  path.reset();
-                    }
+                    if res { for seg in coll {
+                        stroke_segment_path(seg, &surf, &pline, &mut pens);
+                    } } else { surf.stroke_path(&path, &pline, &pens); }  //path.reset();
                 }
             }   path.reset();
         }   Ok(pixm)

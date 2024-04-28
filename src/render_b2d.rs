@@ -42,16 +42,13 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 }
                 Command::FillRects(FillCMD { fill, coll }) => {
                     let style = convert_style(self, fill, scale);
-                    coll.iter().for_each(|rect| { path.addRect(&rect.into());
-                        ctx.fillGeometryExt(&path, style.as_ref());  path.reset();
-                    });
+                    coll.iter().for_each(|rect| path.addRect(&rect.into()));
+                    ctx.fillGeometryExt(&path, style.as_ref());  //path.reset();
                 }
                 Command::FillPath (FillCMD { fill, coll }) => {
                     let style = convert_style(self, fill, scale);
-                    for seg in coll {   let _ = segment_to_path(seg, &mut path);
-                        //if res { return Err("Got line width in fill path segment") }
-                        ctx.fillGeometryExt(&path, style.as_ref());  path.reset();
-                    }
+                    for seg in coll { let _ = segment_to_path(seg, &mut path); }
+                    ctx.fillGeometryExt(&path, style.as_ref());  //path.reset();
                 }
                 Command::DrawLines(DrawCMD { line, lwidth, coll }) => {
                     coll.iter().for_each(|line| {
@@ -91,23 +88,22 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     let pline = convert_style(self, line, scale);
                     ctx.setStrokeWidth(*lwidth);
 
-                    coll.iter().for_each(|rect| {   path.addRect(&rect.into());
-                        ctx.  fillGeometryExt(&path, paint.as_ref());
-                        ctx.strokeGeometryExt(&path, pline.as_ref());    path.reset();
-                    });
+                    coll.iter().for_each(|rect| path.addRect(&rect.into()));
+                    ctx.  fillGeometryExt(&path, paint.as_ref());
+                    ctx.strokeGeometryExt(&path, pline.as_ref());    //path.reset();
                 }
                 Command::OutlinePath (fill, DrawCMD {
                     line, lwidth, coll }) => {
                     let paint = convert_style(self, fill, scale);
                     let pline = convert_style(self, line, scale);
-                    ctx.setStrokeWidth(*lwidth);
 
-                    for seg in coll {   let res = segment_to_path(seg, &mut path);
-                        ctx.  fillGeometryExt(&path, paint.as_ref());
+                    ctx.setStrokeWidth(*lwidth);    let mut res = false;
+                    for seg in coll { res = segment_to_path(seg, &mut path); }
+                    ctx.  fillGeometryExt(&path, paint.as_ref());
 
-                        if res { stroke_segment_path(seg, &mut ctx, pline.as_ref());
-                        } else { ctx.strokeGeometryExt(&path, pline.as_ref()); }  path.reset();
-                    }
+                    if res { for seg in coll {
+                        stroke_segment_path(seg, &mut ctx, pline.as_ref());
+                    } } else { ctx.strokeGeometryExt(&path, pline.as_ref()); }  //path.reset();
                 }
             }   path.reset();
         }   Ok(img)
