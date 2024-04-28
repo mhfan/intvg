@@ -1,17 +1,17 @@
 
 use crate::tinyvg::*;
+use std::{error::Error, io};
 use usvg::tiny_skia_path as skia;
-use std::{path::Path, error::Error, io};
 
-pub trait Convert { fn from_svgf<P: AsRef<Path>>(file: P) ->
+pub trait Convert { fn from_svgd(svgd: &[u8]) ->
     Result<Self, Box<dyn Error>> where Self: std::marker::Sized;
 }
 
 impl<R: io::Read, W: io::Write> Convert for TinyVG<R, W> {
-    fn from_svgf<P: AsRef<Path>>(file: P) -> Result<Self, Box<dyn Error>> {
+    fn from_svgd(svgd: &[u8]) -> Result<Self, Box<dyn Error>> {
         use usvg::{TreeParsing, TreeTextToPath};
         let mut fontdb = usvg::fontdb::Database::new();     fontdb.load_system_fonts();
-        let mut tree = usvg::Tree::from_data(&std::fs::read(&file)?,
+        let mut tree = usvg::Tree::from_data(svgd,
             &usvg::Options::default())?;    tree.convert_text(&fontdb);
 
         //Ok(Self::from_usvg(&tree)) }

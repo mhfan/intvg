@@ -12,7 +12,8 @@
     let mut group = c.benchmark_group("calc24");
     group.sample_size(10);
 
-    let tvg = TVGImage::from_svgf("data/tiger.svg").unwrap();
+    let tvg = TVGImage::from_svgd(
+        &std::fs::read("data/tiger.svg").unwrap()).unwrap();
 
     group.bench_function("tiny_skia", |b| b.iter(|| tvg.render(1.0)));
     #[cfg(feature = "evg")] group.bench_function("GPAC/EVG",

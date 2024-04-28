@@ -106,8 +106,8 @@ impl BLContext {
     }
 
     #[inline] pub fn scale(&mut self, sx: f32, sy: f32) {
-        #[cfg(feature = "b2d_sfp")] let scale = &[ sx, sy ];
-        #[cfg(not(feature = "b2d_sfp"))] let scale = &[ sx as f64, sy as f64 ];
+        #[cfg(feature = "b2d_sfp")] let scale = &[sx, sy];
+        #[cfg(not(feature = "b2d_sfp"))] let scale = &[sx as _, sy as f64];
         safe_dbg!(blContextApplyTransformOp(&mut self.0,
             BLTransformOp::BL_TRANSFORM_OP_SCALE, scale as *const _ as _));
     }
@@ -165,7 +165,7 @@ impl Drop for BLImage { #[inline] fn drop(&mut self) { safe_dbg!(blImageDestroy(
 impl BLImage {
     #[inline] pub fn new(w: u32, h: u32, fmt: BLFormat) -> Self {
         let mut img = object_init();
-        safe_dbg!(blImageInitAs(&mut img, w as i32, h as i32, fmt));     Self(img)
+        safe_dbg!(blImageInitAs(&mut img, w as _, h as _, fmt));    Self(img)
     }
 
     #[inline] pub fn readFromFile(file: &str) -> Self {
@@ -186,7 +186,7 @@ impl BLImage {
 
 pub struct BLPath(BLPathCore);
 impl Drop for BLPath { #[inline] fn drop(&mut self) { safe_dbg!(blPathDestroy(&mut self.0)); } }
-impl BLPath {
+impl BLPath {   #[allow(clippy::new_without_default)]
     #[inline] pub fn new() -> Self { let mut path = object_init();
         safe_dbg!(blPathInit(&mut path));   Self(path)
     }
@@ -212,7 +212,7 @@ impl BLPath {
     #[inline] pub fn close(&mut self) { safe_dbg!(blPathClose(&mut self.0)); }
     #[inline] pub fn reset(&mut self) { safe_dbg!(blPathReset(&mut self.0)); }
 
-    #[inline] pub fn getSize(&self) -> u32 { safe_dbg!(blPathGetSize(&self.0)) as u32 }
+    #[inline] pub fn getSize(&self) -> u32 { safe_dbg!(blPathGetSize(&self.0)) as _ }
     #[inline] pub fn getLastVertex(&self) -> Option<BLPoint> {
         let mut pt = BLPoint { x: 0.0, y: 0.0 };
         if safe_dbg!(blPathGetLastVertex(&self.0, &mut pt)) == BLResultCode::BL_SUCCESS as u32 {
@@ -233,7 +233,17 @@ impl BLPath {
             BLGeometryDirection::BL_GEOMETRY_DIRECTION_CW));
     }
 
-    #[inline] pub fn addBox(&mut self, bbox: &BLBox) {
+    #[inline] pub fn addRect (&mut self, rect: &BLRect) {
+        safe_dbg!(blPathAddRectD(&mut self.0, rect,
+            BLGeometryDirection::BL_GEOMETRY_DIRECTION_CW));
+    }
+
+    #[inline] pub fn addBoxI(&mut self, bbox: &BLBoxI) {
+        safe_dbg!(blPathAddBoxI(&mut self.0, bbox,
+            BLGeometryDirection::BL_GEOMETRY_DIRECTION_CW));
+    }
+
+    #[inline] pub fn addBox (&mut self, bbox: &BLBox) {
         safe_dbg!(blPathAddBoxD(&mut self.0, bbox,
             BLGeometryDirection::BL_GEOMETRY_DIRECTION_CW));
     }
@@ -371,8 +381,8 @@ impl BLGradient {
     }
 
     #[inline] pub fn scale(&mut self, sx: f32, sy: f32) {
-        #[cfg(feature = "b2d_sfp")] let scale = &[ sx, sy ];
-        #[cfg(not(feature = "b2d_sfp"))] let scale = &[ sx as f64, sy as f64 ];
+        #[cfg(feature = "b2d_sfp")] let scale = &[sx, sy];
+        #[cfg(not(feature = "b2d_sfp"))] let scale = &[sx as _, sy as f64];
         safe_dbg!(blGradientApplyTransformOp(&mut self.0,
             BLTransformOp::BL_TRANSFORM_OP_SCALE, scale as *const _ as _));
     }

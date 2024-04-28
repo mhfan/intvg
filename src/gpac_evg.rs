@@ -109,7 +109,7 @@ impl VGPath { #[allow(clippy::new_without_default)] // to build path and stencil
 
     pub fn print_out(&self) {
         unsafe {    let path = &*self.0;
-            for n in 0..path.n_points {     let n = n as isize;
+            for n in 0..path.n_points {     let n = n as _;
                 let pt = &*path.points.offset(n);
                 eprintln!("{}-({:?}, {:?})", *path.tags.offset(n), //pt.x, pt.y);
                     <f32>::from(pt.x), <f32>::from(pt.y));

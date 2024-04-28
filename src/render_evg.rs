@@ -12,9 +12,9 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
             (self.header.height as f32 * scale).ceil() as _);
 
         impl From<&Rect> for GF_Rect {
-            fn from(rect: &Rect) -> Self {
-                Self { x: rect.l.into(), y: rect.b.into(), // screen to world coordinates
-                    width: (rect.r - rect.l).into(), height: (rect.b - rect.t).into(), }
+            fn from(rect: &Rect) -> Self {  // XXX: screen to world coordinates
+                Self {  x: rect.x.into(), y: (rect.y + rect.h).into(),
+                    width: rect.w.into(),      height: rect.h .into(), }
             }
         }
 
@@ -32,16 +32,16 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     let mut iter = coll.iter();
                     if let Some(pt) = iter.next() { path.move_to((*pt).into()) }
                     iter.for_each(|pt| path.line_to((*pt).into()));  path.close();
-                    surf.fill_path(&path, &style_to_stencil(self, fill, &ts)?);
+                    surf.fill_path(&path, &style_to_stencil(self, fill, &ts));
                 }
                 Command::FillRects(FillCMD { fill, coll }) => {
-                    let sten = style_to_stencil(self, fill, &ts)?;
+                    let sten = style_to_stencil(self, fill, &ts);
                     coll.iter().for_each(|rect| { path.add_rect(rect.into());
                         surf.fill_path(&path, &sten);    path.reset();
                     });
                 }
                 Command::FillPath (FillCMD { fill, coll }) => {
-                    let sten = style_to_stencil(self, fill, &ts)?;
+                    let sten = style_to_stencil(self, fill, &ts);
                     for seg in coll {   let _ = segment_to_path(seg, &path);
                         //if res { return Err("Got line width in fill path segment") }
                         surf.fill_path(&path, &sten);    path.reset();
@@ -51,7 +51,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     coll.iter().for_each(|line| {
                         path.move_to(line.start.into()); path.line_to(line.  end.into());
                     }); pens.width =  (*lwidth).into();
-                    surf.stroke_path(&path, &style_to_stencil(self, line, &ts)?, &pens);
+                    surf.stroke_path(&path, &style_to_stencil(self, line, &ts), &pens);
                 }
                 Command::DrawLoop (DrawCMD { line, lwidth, coll },
                     strip) => {     let mut iter = coll.iter();
@@ -59,12 +59,12 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     iter.for_each(|pt| path.line_to((*pt).into()));
 
                     if !*strip { path.close(); }    pens.width = (*lwidth).into();
-                    surf.stroke_path(&path, &style_to_stencil(self, line, &ts)?, &pens);
+                    surf.stroke_path(&path, &style_to_stencil(self, line, &ts), &pens);
                 }
                 Command::DrawPath (DrawCMD {
                     line, lwidth, coll }) => {
-                    let sten = style_to_stencil(self, line, &ts)?;
                     pens.width = (*lwidth).into();
+                    let sten = style_to_stencil(self, line, &ts);
 
                     for seg in coll {
                         stroke_segment_path(seg, &surf, &sten, &mut pens); }
@@ -77,14 +77,14 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     if let Some(pt) = iter.next() { path.move_to((*pt).into()) }
                     iter.for_each(|pt| path.line_to((*pt).into()));  path.close();
 
-                    surf.  fill_path(&path, &style_to_stencil(self, fill, &ts)?);
-                    surf.stroke_path(&path, &style_to_stencil(self, line, &ts)?, &pens);
+                    surf.  fill_path(&path, &style_to_stencil(self, fill, &ts));
+                    surf.stroke_path(&path, &style_to_stencil(self, line, &ts), &pens);
                 }
                 Command::OutlineRects(fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    let paint = style_to_stencil(self, fill, &ts)?;
-                    let pline = style_to_stencil(self, line, &ts)?;
                     pens.width = (*lwidth).into();
+                    let paint = style_to_stencil(self, fill, &ts);
+                    let pline = style_to_stencil(self, line, &ts);
 
                     coll.iter().for_each(|rect| {   path.add_rect(rect.into());
                         surf.  fill_path(&path, &paint);
@@ -93,9 +93,9 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 }
                 Command::OutlinePath (fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    let paint = style_to_stencil(self, fill, &ts)?;
-                    let pline = style_to_stencil(self, line, &ts)?;
                     pens.width = (*lwidth).into();
+                    let paint = style_to_stencil(self, fill, &ts);
+                    let pline = style_to_stencil(self, line, &ts);
 
                     for seg in coll {   let res = segment_to_path(seg, &path);
                         surf.fill_path(&path, &paint);
@@ -160,7 +160,7 @@ fn process_segcmd(path: &VGPath, cmd: &SegInstr) {
 }
 
 fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
-    style: &Style, ts: &GF_Matrix2D) -> Result<Stencil, &'static str> {
+    style: &Style, ts: &GF_Matrix2D) -> Stencil {
     impl From<RGBA8888> for GF_Color {
         fn from(color: RGBA8888) -> Self { // convert to 0xAARRGGBB
             (color.a as u32) << 24 | (color.r as u32) << 16 |
@@ -168,7 +168,7 @@ fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
         }
     }   use crate::gpac_evg::GF_StencilType::*;
 
-    Ok(match style {
+    match style {
         Style::FlatColor(idx) => {
             let sten = Stencil::new(GF_STENCIL_SOLID);
             sten.set_color(img.lookup_color(*idx).into());  sten
@@ -190,7 +190,7 @@ fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             sten.set_radial(points.0.into(), points.1.into(), radius);
             sten.set_matrix(ts);    sten
         }
-    })
+    }
 }
 
 impl From<Point> for GF_Point2D {

@@ -18,9 +18,9 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
         let err_msg = "Fail to build path";
 
         impl From<Rect> for skia::Rect {
-            fn from(r: Rect) -> Self { unsafe { std::mem::transmute(r) } }
+            //fn from(r: Rect) -> Self { unsafe { std::mem::transmute(r) } }
             //fn from(r: Rect) -> Self { skia::Rect::from_ltrb(r.l, r.t, r.r, r.b).unwrap() }
-            //fn from(r: Rect) -> Self { skia::Rect::from_xywh(r.x, r.y, r.w, r.h).unwrap() }
+            fn from(r: Rect) -> Self { skia::Rect::from_xywh(r.x, r.y, r.w, r.h).unwrap() }
         }
 
         for cmd in &self.commands {
@@ -156,11 +156,11 @@ fn process_segcmd(pb: &mut skia::PathBuilder, cmd: &SegInstr) {
         SegInstr::CubicBezier { ctrl, end } =>
             pb.cubic_to(ctrl.0.x, ctrl.0.y, ctrl.1.x, ctrl.1.y, end.x, end.y),
         SegInstr::ArcCircle  { large, sweep, radius, target } =>
-            pb.arc_to(*radius, *radius, 0.0, *large, *sweep, target.x, target.y),
+            pb.arc_to(&(*radius, *radius), 0.0, *large, *sweep, target),
 
         SegInstr::ArcEllipse { large, sweep, radius,
-                rotation, target } => pb.arc_to(radius.0, radius.1,
-                *rotation, *large, *sweep, target.x, target.y),
+                rotation, target } => pb.arc_to(radius,
+                *rotation, *large, *sweep, target),
 
         SegInstr::QuadBezier { ctrl, end } =>
             pb.quad_to(ctrl.x, ctrl.y, end.x, end.y),
@@ -176,8 +176,8 @@ fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
 
     impl From<Point> for skia::Point {
         //fn from(pt: Point) -> Self { (pt.x, pt.y).into() }
-        //fn from(pt: Point) -> Self { Self { x: pt.x, y: pt.y } }
-        fn from(pt: Point) -> Self { unsafe { std::mem::transmute(pt) } }
+        fn from(pt: Point) -> Self { Self { x: pt.x, y: pt.y } }
+        //fn from(pt: Point) -> Self { unsafe { std::mem::transmute(pt) } }
     }
 
     let mut paint = skia::Paint::default(); // default BlendMode::SourceOver
@@ -195,7 +195,7 @@ fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             let (dx, dy) = (points.1.x - points.0.x, points.1.y - points.0.y);
             let radius = if dx.abs() < f32::EPSILON { dy.abs() }
                          else if dy.abs() < f32::EPSILON { dx.abs() }
-                         else { (dx.powi(2) + dy.powi(2)).sqrt() };
+                         else { (dx * dx + dy * dy).sqrt() };
 
             paint.shader = skia::RadialGradient::new(points.0.into(), points.1.into(), radius,
                 vec![ skia::GradientStop::new(0.0, img.lookup_color(cindex.0).into()),
@@ -206,24 +206,24 @@ fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
     }   Ok(paint)
 }
 
-trait PathBuilderExt {  #[allow(clippy::too_many_arguments)]
-    fn arc_to(&mut self, rx: f32, ry: f32, rotation: f32,
-        large: bool, sweep: bool, x: f32, y: f32);
+trait PathBuilderExt {
+    fn arc_to(&mut self, radius: &(f32, f32), rotation: f32,
+        large: bool, sweep: bool, target: &Point);
 }
 
 impl PathBuilderExt for skia::PathBuilder {
-    fn arc_to(&mut self, rx: f32, ry: f32, rotation: f32,
-        large: bool, sweep: bool, x: f32, y: f32) {
-        let prev = match self.last_point() { Some(v) => v, None => return };
+    fn arc_to(&mut self, radius: &(f32, f32), rotation: f32,
+        large: bool, sweep: bool, target: &Point) {
+        let prev = self.last_point().unwrap();
 
         let svg_arc = kurbo::SvgArc {   // lyon_geom: https://github.com/nical/lyon
-            from: kurbo::Point::new(prev.x as _, prev.y as _),
-              to: kurbo::Point::new( x as _,  y as _),
-            radii: kurbo::Vec2::new(rx as _, ry as _),
+             from: kurbo::Point::new(prev.x as _, prev.y as _),
+               to: kurbo::Point::new(target.x as _, target.y as _),
+            radii: kurbo::Vec2 ::new(radius.0 as _, radius.1 as _),
             x_rotation: (rotation as f64).to_radians(), large_arc: large, sweep,
         };
 
-        match kurbo::Arc::from_svg_arc(&svg_arc) {  None => self.line_to(x, y),
+        match kurbo::Arc::from_svg_arc(&svg_arc) {  None => self.line_to(target.x, target.y),
             Some(arc) => arc.to_cubic_beziers(0.1, |p1, p2, p|
                 self.cubic_to(p1.x as _, p1.y as _, p2.x as _, p2.y as _, p.x as _, p.y as _)),
         }

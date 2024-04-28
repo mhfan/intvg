@@ -58,9 +58,9 @@ pub fn reset() {
 pub fn text_width(s: &str, f: &Font, pointsize: u32) -> f32 {
     let (size, mut tw) = (pointsize as VGfloat, 0.0);
     for c in s.chars() {
-        let glyph_index = f.character_map[c as usize];
+        let glyph_index = f.character_map[c as _];
         if  glyph_index != -1 {
-            tw += size * f.glyph_advances[glyph_index as usize] as _ / 65536.0;
+            tw += size * f.glyph_advances[glyph_index as _] as _ / 65536.0;
         }
     }   tw
 }
@@ -70,16 +70,16 @@ pub fn text(x: VGfloat, y: VGfloat, s: &str, f: &Font, pointsize: u32) {
     let (mut mm, mut xx, size) = ([0.0; 9], x, pointsize as _);
     unsafe {    vgGetMatrix(&mut mm as _);
         for c in s.chars() {
-            let glyph_index = f.character_map[c as usize];
+            let glyph_index = f.character_map[c as _];
             if  glyph_index == -1 { continue; }
             let mat = [size, 0.0, 0.0, 0.0, size, 0.0, xx, y, 1.0];
 
-            vgLoadMatrix(&mm as _);
+            vgLoadMatrix(&mm  as _);
             vgMultMatrix(&mat as _);
-            vgDrawPath(f.glyphs[glyph_index as usize],
+            vgDrawPath(f.glyphs[glyph_index as _],
                 VGPaintMode::VG_FILL_PATH as _ | VGPaintMode::VG_STROKE_PATH as _);
 
-            xx += size * f.glyph_advances[glyph_index as usize] as _ / 65536.0;
+            xx += size * f.glyph_advances[glyph_index as _] as _ / 65536.0;
         }   vgLoadMatrix(&mm as _);
     }
 }
@@ -121,8 +121,8 @@ pub fn scale(x: VGfloat, y: VGfloat) { unsafe { vgScale(x, y); } }  // Scales by
 
 fn set_fill(color: &[VGfloat]) {    /// Sets the fill color.
     unsafe {    let fill_paint = vgCreatePaint();
-        vgSetParameteri (fill_paint, VGPaintParamType::VG_PAINT_TYPE as _,
-            VGPaintType::VG_PAINT_TYPE_COLOR as i32);
+        vgSetParameteri (fill_paint, VGPaintParamType::VG_PAINT_TYPE  as _,
+            VGPaintType::VG_PAINT_TYPE_COLOR as _);
         vgSetParameterfv(fill_paint, VGPaintParamType::VG_PAINT_COLOR as _, 4, color.as_ptr());
         vgSetPaint(fill_paint, VGPaintMode::VG_FILL_PATH as _);
         vgDestroyPaint(fill_paint);
@@ -246,7 +246,7 @@ pub fn qbezier(sx: VGfloat, sy: VGfloat, cx: VGfloat, cy: VGfloat, ex: VGfloat, 
 
 /// Interleaves arrays of x, y into a single array.
 pub fn interleave(x: &[VGfloat], y: &[VGfloat], n: i32, points: &mut [VGfloat]) {
-    for i in 0..(n as usize) {
+    for i in 0..(n as _) {
         points[2 * i] = x[i];
         points[2 * i + 1] = y[i];
     }

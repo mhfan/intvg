@@ -299,9 +299,8 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
     }
 
     fn read_rect(&self, reader: &mut R) -> Result<Rect> {
-        let (x, y, w, h) = (self.read_unit(reader)?,
-            self.read_unit(reader)?, self.read_unit(reader)?, self.read_unit(reader)?);
-        Ok(Rect { l: x, t: y, r: x + w, b: y + h }) // align to skia::Rect, easy for rendering
+        Ok(Rect { x: self.read_unit(reader)?, y: self.read_unit(reader)?,
+                  w: self.read_unit(reader)?, h: self.read_unit(reader)? })
     }
 
     fn read_point(&self, reader: &mut R) -> Result<Point> {
@@ -498,9 +497,8 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
     }
 
     fn write_rect(&self, rect: &Rect, writer: &mut W) -> Result<()> {
-        self.write_unit(rect.l, writer)?;  self.write_unit(rect.t, writer)?;
-        self.write_unit(rect.r - rect.l, writer)?;
-        self.write_unit(rect.b - rect.t, writer)
+        self.write_unit(rect.x, writer)?;   self.write_unit(rect.y, writer)?;
+        self.write_unit(rect.w, writer)?;   self.write_unit(rect.h, writer)
     }
 
     fn write_point(&self, point: &Point, writer: &mut W) -> Result<()> {
@@ -659,7 +657,9 @@ pub enum Command { EndOfDocument,
 pub enum Style { FlatColor(VarUInt),   // color_index in the color_table
     LinearGradient { points: (Point, Point), cindex: (VarUInt, VarUInt), },
     RadialGradient { points: (Point, Point), cindex: (VarUInt, VarUInt), },
-    // XXX: why not { start: Point, radius: Unit, cindex: (VarUInt, VarUInt), },
+    // The gradient is formed by a mental circle with the center at point_0 and
+    // point_1 being somewhere on the circle outline. Thus, the radius of said
+    // circle is the distance between point_0 and point_1.
 }
 
 impl Style {
@@ -687,7 +687,7 @@ pub struct Line { pub start: Point, pub end: Point, }
 //  0x13 and a scale of 4, we get the final value of 1.1875, as the number
 //  is interpretet as binary b0001.0011.
 #[derive(Clone, Copy)] pub struct Point { pub x: Unit, pub y: Unit }
-#[derive(Clone, Copy)] pub struct Rect  { pub l: Unit, pub t: Unit, pub r: Unit, pub b: Unit }
+#[derive(Clone, Copy)] pub struct Rect  { pub x: Unit, pub y: Unit, pub w: Unit, pub h: Unit }
 
 //  Paths describe instructions to create complex 2D graphics.
 //

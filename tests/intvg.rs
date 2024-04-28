@@ -22,7 +22,7 @@
         let ext = path.extension().unwrap();
         let tvg = if ext == "tvg" {
             TVGImage::load_data(&mut BufReader::new(File::open(&path)?))?
-        } else if ext == "svg" { TVGImage::from_svgf(&path)?
+        } else if ext == "svg" { TVGImage::from_svgd(&fs::read(&path)?)?
         } else { continue }; // "data/*.png"
 
         let stem = path.file_stem().unwrap().to_str().unwrap();

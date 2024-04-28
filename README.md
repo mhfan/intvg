@@ -33,3 +33,6 @@ A built-in Rust binding for Blend2D, simpler than outdated [blend2d-rs](https://
 |  GPAC/EVG: | 18.07 ms |    55.3 fps | fixed-point math |
 
 Test rendering [Ghostscript_Tiger.svg](https://commons.wikimedia.org/wiki/File:Ghostscript_Tiger.svg) on _MacBook Pro_ with _Apple M1 Pro_.
+
+* <https://www.nan.fyi/svg-paths>
+
