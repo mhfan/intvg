@@ -13,10 +13,9 @@
     assert!(TVGImage::load_data(&mut BufReader::new(File::open("data/tiger.svg")?))
         .is_err_and(|e| { eprintln!("{e}\n{e:?}"); true }));    // coverage TVGError
 
-    let mut time_render = 0f32;
-    for entry in fs::read_dir("data")? {    let entry = entry?;
+    for entry in fs::read_dir("data")? { let entry = entry?;
         if !entry.file_type().is_ok_and(|ft| ft.is_file()) { continue }
-        let path = entry.path();
+        let path = entry.path();    println!("Test {}:", path.display());
 
         //if  path.as_os_str() != "data/tiger.tvg" { continue }   // to test specific file
         let ext = path.extension().unwrap();
@@ -26,16 +25,16 @@
         } else { continue }; // "data/*.png"
 
         let stem = path.file_stem().unwrap().to_str().unwrap();
-        tvg.save_data(&mut BufWriter::new(File::create(format!("target/{}.tvg", stem))?))?;
-        let tnow = std::time::Instant::now();
+        let tvgf = format!("target/{}.tvg", stem);
+        tvg.save_data(&mut BufWriter::new(File::create(&tvgf)?))?;
+
         let img = tvg.render(1.0)?;
         #[cfg(feature = "evg")] intvg::render_evg::Render::render(&tvg, 1.0)?;
         #[cfg(feature = "b2d")] intvg::render_b2d::Render::render(&tvg, 1.0)?;
-        let timing = tnow.elapsed().as_secs_f32();  time_render += timing;
-        println!("{}: rendering {:.2} fps", path.display(), 1.0 / timing);
         img.save_png(format!("target/{}.png", stem))?;
-    }   println!("All rendering: {:.3} s", time_render);
 
-    Ok(())
+        TVGImage::load_data(&mut BufReader::new(File::open(&tvgf)?)).map_err(
+            |err| { eprintln!("Fail to load `{}'", &tvgf);  err })?;
+    }   Ok(())
 }
 

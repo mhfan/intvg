@@ -100,7 +100,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
     pub fn lookup_color(&self, idx: VarUInt) -> RGBA8888 { self.color_table[idx as usize] }
     pub fn push_color(&mut self, color: RGBA8888) -> VarUInt {
         if let Some(idx) = self.color_table.iter().position(|c|
-            c.r == color.r && c.g == color.g && c.b == color.b && c.a == color.a) { idx as u32
+            c.r == color.r && c.g == color.g && c.b == color.b && c.a == color.a) { idx as _
         } else { self.color_table.push(color);  self.color_table.len() as u32 - 1 }
     }
 
@@ -108,11 +108,12 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
         let mut tvgd = Self::new();
 
         let val = reader.read_u16_le()?;    if  val != TVG_MAGIC {
-            return Err(TVGError { kind: ErrorKind::InvalidData(val as u8),
+            return Err(TVGError { kind: ErrorKind::InvalidData(val as _),
                 msg: "incorrect magic number" });
         }
         let val  = reader.read_u8()?;       if  val != TVG_VERSION {
-            return Err(TVGError { kind: ErrorKind::InvalidData(val), msg: "incorrect version" });
+            return Err(TVGError { kind: ErrorKind::InvalidData(val),
+                msg: "incorrect version" });
         }
 
         let val = reader.read_u8()?;   tvgd.header.scale = val & 0x0F;
@@ -130,35 +131,33 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
                 msg: "unsupported color encoding" })
         };  assert!(tvgd.commands.is_empty() && tvgd.color_table.is_empty());
 
-        tvgd.header.width  = (tvgd.read_range)(reader)? as u32;
-        tvgd.header.height = (tvgd.read_range)(reader)? as u32;
+        tvgd.header.width  = (tvgd.read_range)(reader)? as _;
+        tvgd.header.height = (tvgd.read_range)(reader)? as _;
         let color_count = reader.read_var_uint()?;
+        tvgd.color_table.reserve_exact(color_count as _);
 
-        tvgd.color_table.reserve_exact(color_count as usize);
-        tvgd.header.color_encoding = match (val >> 4) & 0x03 {  // XXX: unified to RGBA8888
-            0 => { for _ in 0..color_count { tvgd.color_table.push(RGBA8888 {
+        tvgd.header.color_encoding = ColorEncoding::RGBA8888;
+        match (val >> 4) & 0x03 {   // XXX: unified to RGBA8888
+            0 => for _ in 0..color_count { tvgd.color_table.push(RGBA8888 {
                     r: reader.read_u8()?, g: reader.read_u8()?,
                     b: reader.read_u8()?, a: reader.read_u8()?,
-                })} ColorEncoding::RGBA8888
-            }
+            })},
 
-            1 => { for _ in 0..color_count { let val = reader.read_u16_le()?;
-                tvgd.color_table.push(RGBA8888 {    r: ((val & 0x001F) << 3) as u8,
-                    g: ((val & 0x07E0) >> 3) as u8, b: ((val & 0xF800) >> 8) as u8, a: 255,
-                })} ColorEncoding::RGB565
-            }
+            1 => for _ in 0..color_count { let val = reader.read_u16_le()?;
+                tvgd.color_table.push(RGBA8888 {   r: ((val & 0x001F) << 3) as _,
+                    g: ((val & 0x07E0) >> 3) as _, b: ((val & 0xF800) >> 8) as _, a: 255,
+            })},
 
-            2 => { for _ in 0..color_count { tvgd.color_table.push(RGBA8888 {
-                    r: (reader.read_f32_le()? * 255.0 + 0.5) as u8,
-                    g: (reader.read_f32_le()? * 255.0 + 0.5) as u8,
-                    b: (reader.read_f32_le()? * 255.0 + 0.5) as u8,
-                    a: (reader.read_f32_le()? * 255.0 + 0.5) as u8,
-                })} ColorEncoding::RGBAf32
-            }
+            2 => for _ in 0..color_count { tvgd.color_table.push(RGBA8888 {
+                    r: (reader.read_f32_le()? * 255.0 + 0.5) as _,
+                    g: (reader.read_f32_le()? * 255.0 + 0.5) as _,
+                    b: (reader.read_f32_le()? * 255.0 + 0.5) as _,
+                    a: (reader.read_f32_le()? * 255.0 + 0.5) as _,
+            })},
 
             x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
-                    msg: "custom color encoding is not supported" }) //ColorEncoding::Custom,
-        };  eprintln!("{:?}", &tvgd.header);
+                msg: "custom color encoding is not supported" }) //ColorEncoding::Custom,
+        }   eprintln!("{:?}", &tvgd.header);
 
         loop {  let cmd = tvgd.read_command(reader)?;
             if let Command::EndOfDocument = cmd {
@@ -176,7 +175,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
             3 => {  let count = reader.read_var_uint()? + 1;
                 let fill= self.read_style(skind, reader)?;
-                let coll = self.read_path(count as usize, reader)?;
+                let coll = self.read_path(count as _, reader)?;
                 Command::FillPath(FillCMD { fill, coll })
             }
             4 => Command::DrawLines(self.read_drawcmd(skind, reader, Self::read_line)?),
@@ -186,7 +185,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
             7 => {  let count = reader.read_var_uint()? + 1;
                 let line= self.read_style(skind, reader)?;
                 let lwidth = self.read_unit(reader)?;
-                let coll = self.read_path(count as usize, reader)?;
+                let coll = self.read_path(count as _, reader)?;
                 Command::DrawPath(DrawCMD { line, lwidth, coll })
             }
             8 => {  let res = self.read_outline(skind, reader,
@@ -212,7 +211,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
         read_fn: impl Fn(&Self, &mut R) -> Result<T>) -> Result<FillCMD<T>> {
         let count = reader.read_var_uint()? + 1;
         let fill = self.read_style(fill_kind, reader)?;
-        let mut coll = Vec::with_capacity(count as usize);
+        let mut coll = Vec::with_capacity(count as _);
         for _ in 0..count { coll.push(read_fn(self, reader)?); }
         Ok(FillCMD { fill, coll })
     }
@@ -222,7 +221,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
         let count = reader.read_var_uint()? + 1;
         let line = self.read_style(line_kind, reader)?;
         let lwidth = self.read_unit(reader)?;
-        let mut coll = Vec::with_capacity(count as usize);
+        let mut coll = Vec::with_capacity(count as _);
         for _ in 0..count { coll.push(read_fn(self, reader)?); }
         Ok(DrawCMD { line, lwidth, coll })
     }
@@ -246,7 +245,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
     }
 
     fn read_segment(&self, len: u32, reader: &mut R) -> Result<Segment> {
-        let mut cmds = Vec::with_capacity(len as usize);
+        let mut cmds = Vec::with_capacity(len as _);
         let start = self.read_point(reader)?;
         for _ in 0..len {   let val = reader.read_u8()?;
             let lwidth = if 0 < val & 0x10 {
@@ -326,9 +325,9 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
         writer.write_u8((self.header.coordinate_range as u8) << 6 |
                         (self.header.color_encoding   as u8) << 4 | self.header.scale)?;
 
-        (self.write_range)(writer, self.header.width  as i32)?;
-        (self.write_range)(writer, self.header.height as i32)?;
-        writer.write_var_uint(self.color_table.len() as u32)?;
+        (self.write_range)(writer, self.header.width  as _)?;
+        (self.write_range)(writer, self.header.height as _)?;
+        writer.write_var_uint(self.color_table.len()  as _)?;
 
         match self.header.color_encoding {  //ColorEncoding::Custom => (),
             ColorEncoding::RGBA8888 => for color in &self.color_table {
@@ -387,7 +386,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
                 self.write_outline(9, fill, cmd, writer, Self::write_rect),
 
             Command::OutlinePath (fill, cmd) => {
-                writer.write_u8( (fill.to_u8() << 6) | 7)?;
+                writer.write_u8( (fill.to_u8() << 6) | 10)?;
                 if (1 << 6) < cmd.coll.len() { return Err(TVGError {
                     kind: ErrorKind::OutOfRange, msg: "outline path segment" }) }
                 writer.write_u8((cmd.line.to_u8() << 6) | (cmd.coll.len() as u8 - 1))?;
@@ -586,14 +585,15 @@ trait TVGRead: io::Read  {
         let mut buf = [0; 4]; self.read_exact(&mut buf)?; Ok(f32::from_le_bytes(buf)) }
 
     fn  read_var_uint(&mut self) -> Result<VarUInt> {
-        let (mut val, mut cnt) = (0u32, 0);
-        loop {  let tmp = self.read_u8()?;  //self.read(&mut buf)?;
-            val |= (tmp as u32 & 0x7F) << (7 * cnt);
-            if (tmp & 0x80) == 0 { break }     cnt += 1;
-            if 4 < cnt { return Err(TVGError { kind: ErrorKind::InvalidData(tmp),
-                    msg: "Invalid 5th byte in VarUInt encoding" });
-            }
-        }   Ok(val)
+        let mut val = 0u32;
+        for cnt in 0..5 {
+            let tmp = self.read_u8()?;
+            val |= ((tmp & 0x7F) as u32) << (7 * cnt);
+            if tmp < 0x80 { return Ok(val); }
+        }
+
+        Err(TVGError { kind: ErrorKind::InvalidData(val as _),
+            msg: "Invalid VarUInt encoding; too many bytes" })
     }
 }
 
@@ -611,10 +611,9 @@ trait TVGWrite: io::Write {
         io::Result<()> { self.write_all(&n.to_le_bytes()) }
 
     fn write_var_uint(&mut self, mut val: u32)-> io::Result<()> {
-        loop {  let flag = val < 0x80;
-            let tmp = (val & 0x7F) as u8;   //cnt += 1;
-            self.write_u8(if flag { tmp } else { tmp | 0x80 })?;
-            if flag { break } else { val >>= 7; }
+        loop {  let (flag, tmp) = (val < 0x80, val as u8);
+            if flag { self.write_u8(tmp)?;  break
+            }  else { self.write_u8(tmp | 0x80)?; val >>= 7; }
         }   Ok(())
     }
 }
