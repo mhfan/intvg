@@ -9,17 +9,16 @@ pub trait Convert { fn from_svgd(svgd: &[u8]) ->
 
 impl<R: io::Read, W: io::Write> Convert for TinyVG<R, W> {
     fn from_svgd(svgd: &[u8]) -> Result<Self, Box<dyn Error>> {
-        use usvg::{TreeParsing, TreeTextToPath};
-        let mut fontdb = usvg::fontdb::Database::new();     fontdb.load_system_fonts();
-        let mut tree = usvg::Tree::from_data(svgd,
-            &usvg::Options::default())?;    tree.convert_text(&fontdb);
+        let mut fontdb = usvg::fontdb::Database::new(); fontdb.load_system_fonts();
+        let tree = usvg::Tree::from_data(svgd, //&std::fs::read(&path)?,
+            &usvg::Options::default(), &fontdb)?;
 
         //Ok(Self::from_usvg(&tree)) }
         //fn from_usvg(tree: &usvg::Tree) -> Self {
 
         let mut tvg = Self::new();
-        tvg.header.width  = tree.size.width() .round() as u32;
-        tvg.header.height = tree.size.height().round() as u32;
+        tvg.header.width  = tree.size().width() .round() as _;
+        tvg.header.height = tree.size().height().round() as _;
 
         let coordinate_limit = u32::max(tvg.header.width, tvg.header.height);
         //let range_bits = match tvg.header.coordinate_range { CoordinateRange::Default => 16,
@@ -31,116 +30,99 @@ impl<R: io::Read, W: io::Write> Convert for TinyVG<R, W> {
             (1 << range_bits) { scale_bits += 1; }  tvg.header.scale = scale_bits;
         // XXX: still need a traversely check CoordinateRange by a null writer?
 
-        let trans = usvg::utils::view_box_to_transform(
-            tree.view_box.rect, tree.view_box.aspect, tree.size);
-        convert_children(&mut tvg, &tree.root, trans);
+        convert_nodes(&mut tvg, tree.root(), &usvg::Transform::default());
         eprintln!("{:?}", &tvg.header);     Ok(tvg)
     }
 }
 
-fn convert_children<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
-    parent: &usvg::Node, trans: usvg::Transform) {
-    for child in parent.children() {
-        match *child.borrow() {
-            usvg::NodeKind::Group(ref g) =>
-                convert_children(tvg, &child, trans.pre_concat(g.transform)),
+fn convert_nodes<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
+    parent: &usvg::Group, trfm: &usvg::Transform) {
+    for child in parent.children() { match child {
+        usvg::Node::Group(group) =>     // XXX: trfm is needed on rendering only
+            convert_nodes(tvg, group, &trfm.pre_concat(group.transform())),
 
-            usvg::NodeKind::Path(ref path) => { // XXX: how to avoid clone path.data?
-                let new_path = (*path.data).clone().transform(trans).unwrap();
-                let (bbox, mut lwidth) = (new_path.bounds(), 0.0);
+        usvg::Node::Path(path) => {     let mut lwidth = 0.0;
+            let coll = if trfm.is_identity() { convert_path(path.data())
+            } else { convert_path(&path.data().clone().transform(*trfm).unwrap()) };
 
-                let fill = path.  fill.as_ref().and_then(|fill|
-                    convert_paint(tvg, &fill.paint, fill.opacity, bbox));
-                let line = path.stroke.as_ref().and_then(|line| {
-                    lwidth = line.width.get();
-                    convert_paint(tvg, &line.paint, line.opacity, bbox) });
+            let fill = path  .fill().and_then(|fill|
+                convert_paint(tvg, fill.paint(), fill.opacity(), trfm));
+            let line = path.stroke().and_then(|line| {
+                lwidth = line.width().get();    // XXX: need to apply transform?
+                convert_paint(tvg, line.paint(), line.opacity(), trfm) });
 
-                let cmd = match (fill, line) {  // XXX: detect simple shape (line/rect)?
-                    (Some(fill), None) => Command::FillPath(FillCMD { fill,
-                        coll: convert_path_segment(&new_path) }),
-                    (None, Some(line)) => Command::DrawPath(DrawCMD { line, lwidth,
-                        coll: convert_path_segment(&new_path) }),
-                    (Some(fill), Some(line)) => Command::OutlinePath(fill,
-                        DrawCMD { line, lwidth, coll: convert_path_segment(&new_path) }),
-                    _ => continue
-                };  tvg.commands.push(cmd);
-            }
+            let cmd = match (fill, line) {
+                (Some(fill), None) => Command::FillPath(FillCMD { fill, coll }),
+                (None, Some(line)) => Command::DrawPath(DrawCMD { line, lwidth, coll }),
+                (Some(fill), Some(line)) =>
+                    Command::OutlinePath(fill, DrawCMD { line, lwidth, coll }),
 
-            usvg::NodeKind::Image(ref tvg) => eprintln!("Unsupported {:?}", tvg.kind),
-            usvg::NodeKind::Text(_)  => eprintln!("Text Should be converted to path in usvg"),
+                _ => { eprintln!("Neither fill nor line"); continue }
+            };  tvg.commands.push(cmd);
         }
-    }
+
+        usvg::Node::Image(_) => eprintln!("Not support image node"),
+        usvg::Node::Text(text) => { let group = text.flattened();
+            convert_nodes(tvg, group, &trfm.pre_concat(group.transform()));
+        }
+    } }
 }
 
-fn convert_path_segment(path: &skia::Path) -> Vec<Segment> {
-    #[allow(clippy::from_over_into)] impl Into<Point> for skia::Point {
-        fn into(self) -> Point { unsafe { std::mem::transmute(self) } }
-        //fn into(self) -> Point { Point { x: self.x, y: self.y } }
+fn convert_path(path: &skia::Path) -> Vec<Segment> {
+    impl From<skia::Point> for Point {  //unsafe { std::mem::transmute(pt) }
+        fn from(pt: skia::Point) -> Self { Self { x: pt.x, y: pt.y } }
     }
 
     let (mut coll, mut cmds) = (vec![], vec![]);
     let  mut start = Point { x: 0.0, y: 0.0 };
     for seg in path.segments() {
         let instr = match seg {
-            skia::PathSegment::MoveTo(pt) => { start = pt.into();
-                if !cmds.is_empty() {   coll.push(Segment { start, cmds });
-                    cmds = vec![]; }    continue
+            skia::PathSegment::MoveTo(pt) => {
+                if !cmds.is_empty() { coll.push(Segment { start, cmds }); cmds = vec![]; }
+                start = pt.into();  continue
             }
-            skia::PathSegment::LineTo(pt) =>
-                SegInstr::Line { end: pt.into() },
+            skia::PathSegment::LineTo(pt) => SegInstr::Line { end: pt.into() },
             skia::PathSegment::QuadTo(ctrl, end) =>
                 SegInstr::QuadBezier { ctrl: ctrl.into(), end: end.into() },
-            skia::PathSegment::CubicTo(ctrl1, ctrl2, end) =>
-                SegInstr::CubicBezier { ctrl: (ctrl1.into(), ctrl2.into()), end: end.into() },
+            skia::PathSegment::CubicTo(ctrl0, ctrl1, end) =>
+                SegInstr::CubicBezier { ctrl: (ctrl0.into(), ctrl1.into()), end: end.into() },
+
             skia::PathSegment::Close => SegInstr::ClosePath,
         };  cmds.push(SegmentCommand { instr, lwidth: None });
     }   if !cmds.is_empty() { coll.push(Segment { start, cmds }); }     coll
 }
 
 fn convert_paint<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
-    paint: &usvg::Paint, opacity: usvg::Opacity, bbox: usvg::Rect) -> Option<Style> {
-    fn gradient_transform(grad: &usvg::BaseGradient,
-        bbox: usvg::Rect) -> Option<usvg::Transform> {
-        if grad.units == usvg::Units::ObjectBoundingBox {
-            //let bbox = match bbox.to_rect() {
-            //    Some(bbox) => bbox, None => return None };
-            let  ts = usvg::Transform::from_row(bbox.width(),
-                0.0, 0.0, bbox.height(), bbox.x(), bbox.y());
-            Some(ts.pre_concat(grad.transform))
-        } else { Some(grad.transform) }
-    }
-
-    let get_color = |stop: &usvg::Stop| -> RGBA8888 {
-        RGBA8888 {  r: stop.color.red,  g:  stop.color.green,
-                    b: stop.color.blue, a: (stop.opacity * opacity).to_u8() }
+    paint: &usvg::Paint, opacity: usvg::Opacity, _trfm: &usvg::Transform) -> Option<Style> {
+    let get_color = |stop: &usvg::Stop| {
+        let color = stop.color();
+        RGBA8888 { r: color.red, g: color.green, b: color.blue,
+                   a: (stop.opacity() * opacity).to_u8() }
     };
 
-    match paint { usvg::Paint::Pattern(_) => {
-            eprintln!("pattern painting is not supported"); None },
+    impl From<(f32, f32)> for Point {   // unsafe { std::mem::transmute(pt) }
+        fn from(pt: (f32, f32)) -> Self { Self { x: pt.0, y: pt.1 } }
+    }
+
+    match paint { usvg::Paint::Pattern(_) => {  // trfm should be applied here
+            eprintln!("Not support pattern painting"); None },
         usvg::Paint::Color(color) => {
             Some(Style::FlatColor(tvg.push_color(RGBA8888 { r: color.red,
                 g: color.green, b: color.blue, a: opacity.to_u8() })))
         }
         usvg::Paint::LinearGradient(grad) => {
-            let ts = gradient_transform(grad, bbox)?;
-            let mut p1 = (grad.x1, grad.y1).into();
-            let mut p2 = (grad.x2, grad.y2).into();
-            ts.map_point(&mut p1);  ts.map_point(&mut p2);
-
-            let c1 = tvg.push_color(get_color(&grad.stops[0]));
-            let c2 = tvg.push_color(get_color(&grad.stops[1]));
-            Some(Style::LinearGradient { points: (p1.into(), p2.into()), cindex: (c1, c2) })
+            let p0 = (grad.x1(), grad.y1()).into();
+            let p1 = (grad.x2(), grad.y2()).into();
+            let c0 = tvg.push_color(get_color(&grad.stops()[0]));
+            let c1 = tvg.push_color(get_color(&grad.stops()[1]));
+            Some(Style::LinearGradient { points: (p0, p1), cindex: (c0, c1) })
         }
         usvg::Paint::RadialGradient(grad) => {
-            let ts = gradient_transform(grad, bbox)?;
-            let mut p1 = (grad.cx, grad.cy).into();
-            //let mut p2 = (grad.fx, grad.fy).into();   // XXX:
-            let mut p2 = (grad.cx, grad.cy + grad.r.get()).into();
-            ts.map_point(&mut p1);  ts.map_point(&mut p2);
-
-            let c1 = tvg.push_color(get_color(&grad.stops[0]));
-            let c2 = tvg.push_color(get_color(&grad.stops[1]));
-            Some(Style::RadialGradient { points: (p1.into(), p2.into()), cindex: (c1, c2) })
+            let p0 = (grad.fx(), grad.fy()).into(); // focus/start, center/end
+            let p1 = (grad.cx(), grad.cy() + grad.r().get()).into();
+            let c0 = tvg.push_color(get_color(&grad.stops()[0]));
+            let c1 = tvg.push_color(get_color(&grad.stops()[1]));
+            Some(Style::RadialGradient { points: (p0, p1), cindex: (c0, c1) })
         }
     }
 }

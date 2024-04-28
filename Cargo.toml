@@ -1,7 +1,7 @@
 
 [package]
 name = "intvg"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 default-run = "intvg"
 license = "MIT OR Apache-2.0"
@@ -20,7 +20,7 @@ keywords = [ "TinyVG", "SVG", "tvg", "vector-graphic", "EVG", "Blend2D", "B2D" ]
 #tiny-skia-path = "0.11"
 tiny-skia = "0.11"
 kurbo = "0.11"  # Bezier curves utils
-usvg  = "0.36"  # XXX: bump to 0.41
+usvg  = "0.41"
 
 #build-time = { version = "0.1", git = "https://github.com/AlephAlpha/build-time" }
 png = { version = "0.17", optional = true }
