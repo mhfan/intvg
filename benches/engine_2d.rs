@@ -12,7 +12,7 @@
     let mut group = c.benchmark_group("calc24");
     group.sample_size(10);
 
-    let tvg = TVGImage::from_svgd(
+    let tvg = TVGImage::from_usvg(
         &std::fs::read("data/tiger.svg").unwrap()).unwrap();
 
     group.bench_function("tiny_skia", |b| b.iter(|| tvg.render(1.0)));

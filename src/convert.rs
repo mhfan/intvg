@@ -3,12 +3,12 @@ use crate::tinyvg::*;
 use std::{error::Error, io};
 use usvg::tiny_skia_path as skia;
 
-pub trait Convert { fn from_svgd(svgd: &[u8]) ->
+pub trait Convert { fn from_usvg(svgd: &[u8]) ->
     Result<Self, Box<dyn Error>> where Self: std::marker::Sized;
 }
 
 impl<R: io::Read, W: io::Write> Convert for TinyVG<R, W> {
-    fn from_svgd(svgd: &[u8]) -> Result<Self, Box<dyn Error>> {
+    fn from_usvg(svgd: &[u8]) -> Result<Self, Box<dyn Error>> {
         let mut fontdb = usvg::fontdb::Database::new(); fontdb.load_system_fonts();
         let tree = usvg::Tree::from_data(svgd, //&std::fs::read(&path)?,
             &usvg::Options::default(), &fontdb)?;

@@ -73,7 +73,7 @@ fn app() -> Element {
                 let data = feng.read_file(&feng.files()[0]).await.unwrap();
 
                 use intvg::{convert::Convert, tinyvg::TVGBuf};
-                let tvg = if evt.value().ends_with(".svg") { TVGBuf::from_svgd(&data).unwrap()
+                let tvg = if evt.value().ends_with(".svg") { TVGBuf::from_usvg(&data).unwrap()
                 } else { TVGBuf::load_data(&mut std::io::Cursor::new(&data)).unwrap() };
                 tracing::info!("picked file: {}, {:?} with {} bytes\nTinyVG: {:?}",
                     evt.value(), feng.files(), data.len(), tvg.header);

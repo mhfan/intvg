@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut path = args.nth(1).unwrap();
     let tvg = if path.ends_with(".tvg") {
         TVGImage::load_data(&mut BufReader::new(File::open(&path)?))?
-    } else if path.ends_with(".svg") { TVGImage::from_svgd(&fs::read(&path)?)?
+    } else if path.ends_with(".svg") { TVGImage::from_usvg(&fs::read(&path)?)?
     } else { return Err("only support .svg & .tvg files".into()) };
 
     if 2 < cnt { path = args.next().unwrap(); } else {
