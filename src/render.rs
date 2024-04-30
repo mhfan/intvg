@@ -12,7 +12,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
             (self.header.height as f32 * scale).ceil() as _).ok_or("Fail to create pixmap")?;
 
         // XXX: rendering up-scale and then scale down for anti-aliasing?
-        let ts = skia::Transform::from_scale(scale, scale);
+        let trfm = skia::Transform::from_scale(scale, scale);
         let mut stroke = skia::Stroke { line_join: skia::LineJoin::Round,
             line_cap: skia::LineCap::Round, ..Default::default() };
         let err_msg = "Fail to build path";
@@ -23,6 +23,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
             fn from(r: Rect) -> Self { skia::Rect::from_xywh(r.x, r.y, r.w, r.h).unwrap() }
         }
 
+        let fillrule = skia::FillRule::Winding;
         for cmd in &self.commands {
             let mut pb = skia::PathBuilder::new();
             match cmd {     Command::EndOfDocument => (),
@@ -33,17 +34,17 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     iter.for_each(|pt| pb.line_to(pt.x, pt.y));  pb.close();
 
                     pixmap.fill_path(&pb.finish().ok_or(err_msg)?,
-                        &style_to_paint(self, fill, ts)?, skia::FillRule::Winding, ts, None);
+                        &style_to_paint(self, fill, trfm)?, fillrule, trfm, None);
                 }
                 Command::FillRects(FillCMD { fill, coll }) => {
                     coll.iter().for_each(|rect| pb.push_rect((*rect).into()));
                     pixmap.fill_path(&pb.finish().ok_or(err_msg)?,
-                        &style_to_paint(self, fill, ts)?, skia::FillRule::Winding, ts, None);
+                        &style_to_paint(self, fill, trfm)?, fillrule, trfm, None);
                 }
                 Command::FillPath (FillCMD { fill, coll }) => {
                     for seg in coll { let _ = segment_to_path(seg, &mut pb); }
                     pixmap.fill_path(&pb.finish().ok_or(err_msg)?,
-                        &style_to_paint(self, fill, ts)?, skia::FillRule::Winding, ts, None);
+                        &style_to_paint(self, fill, trfm)?, fillrule, trfm, None);
                 }
                 Command::DrawLines(DrawCMD { line, lwidth, coll }) => {
                     coll.iter().for_each(|line| {
@@ -52,7 +53,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     }); stroke.width = *lwidth;
 
                     pixmap.stroke_path(&pb.finish().ok_or(err_msg)?,
-                        &style_to_paint(self, line, ts)?, &stroke, ts, None);
+                        &style_to_paint(self, line, trfm)?, &stroke, trfm, None);
                 }
                 Command::DrawLoop (DrawCMD { line, lwidth, coll },
                     strip) => {     let mut iter = coll.iter();
@@ -61,15 +62,15 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
 
                     if !*strip { pb.close(); }  stroke.width = *lwidth;
                     pixmap.stroke_path(&pb.finish().ok_or(err_msg)?,
-                        &style_to_paint(self, line, ts)?, &stroke, ts, None);
+                        &style_to_paint(self, line, trfm)?, &stroke, trfm, None);
                 }
                 Command::DrawPath (DrawCMD {
                     line, lwidth, coll }) => {
-                    let paint = style_to_paint(self, line, ts)?;
+                    let paint = style_to_paint(self, line, trfm)?;
                     stroke.width = *lwidth;
 
                     for seg in coll {
-                        stroke_segment_path(seg, &mut pixmap, &paint, &mut stroke, ts)?; }
+                        stroke_segment_path(seg, &mut pixmap, &paint, &mut stroke, trfm)?; }
                 }
                 Command::OutlinePolyg(fill, DrawCMD {
                     line, lwidth, coll }) => {
@@ -78,35 +79,36 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     iter.for_each(|pt| pb.line_to(pt.x, pt.y));     pb.close();
                     let path = pb.finish().ok_or(err_msg)?;     stroke.width = *lwidth;
 
-                    pixmap.  fill_path(&path, &style_to_paint(self, fill, ts)?,
-                        skia::FillRule::Winding, ts, None);
-                    pixmap.stroke_path(&path, &style_to_paint(self, line, ts)?, &stroke, ts, None);
+                    pixmap.  fill_path(&path,
+                        &style_to_paint(self, fill, trfm)?, fillrule, trfm, None);
+                    pixmap.stroke_path(&path,
+                        &style_to_paint(self, line, trfm)?,  &stroke, trfm, None);
                 }
                 Command::OutlineRects(fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    let paint = style_to_paint(self, fill, ts)?;
-                    let pline = style_to_paint(self, line, ts)?;
+                    let paint = style_to_paint(self, fill, trfm)?;
+                    let pline = style_to_paint(self, line, trfm)?;
                     stroke.width = *lwidth;
 
                     coll.iter().for_each(|rect| pb.push_rect((*rect).into()));
                     let path = pb.finish().ok_or(err_msg)?;
 
-                    pixmap.  fill_path(&path, &paint, skia::FillRule::Winding, ts, None);
-                    pixmap.stroke_path(&path, &pline, &stroke, ts, None);
+                    pixmap.  fill_path(&path, &paint, fillrule, trfm, None);
+                    pixmap.stroke_path(&path, &pline,  &stroke, trfm, None);
                 }
                 Command::OutlinePath (fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    let paint = style_to_paint(self, fill, ts)?;
-                    let pline = style_to_paint(self, line, ts)?;
+                    let paint = style_to_paint(self, fill, trfm)?;
+                    let pline = style_to_paint(self, line, trfm)?;
 
                     stroke.width = *lwidth;     let mut res = false;
                     for seg in coll { res = segment_to_path(seg, &mut pb); }
                     let path = pb.finish().ok_or(err_msg)?;
-                    pixmap.fill_path(&path, &paint, skia::FillRule::Winding, ts, None);
+                    pixmap.fill_path(&path, &paint, fillrule, trfm, None);
 
                     if res { for seg in coll {
-                        stroke_segment_path(seg, &mut pixmap, &pline, &mut stroke, ts)?;
-                    } } else { pixmap.stroke_path(&path, &pline, &stroke, ts, None); }
+                        stroke_segment_path(seg, &mut pixmap, &pline, &mut stroke, trfm)?;
+                    } } else { pixmap.stroke_path(&path, &pline, &stroke, trfm, None); }
                 }
             }
         }   Ok(pixmap)
@@ -114,7 +116,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
 }
 
 fn stroke_segment_path(seg: &Segment, pixmap: &mut skia::Pixmap, paint: &skia::Paint,
-    stroke: &mut skia::Stroke, ts: skia::Transform) -> Result<(), &'static str> {
+    stroke: &mut skia::Stroke, trfm: skia::Transform) -> Result<(), &'static str> {
     let mut pb = skia::PathBuilder::new();
     pb.move_to(seg.start.x, seg.start.y);
 
@@ -122,14 +124,14 @@ fn stroke_segment_path(seg: &Segment, pixmap: &mut skia::Pixmap, paint: &skia::P
         if let Some(width) = cmd.lwidth {
             if 1 < pb.len() {   let err_msg = "no start";
                 let start = pb.last_point().ok_or(err_msg)?;
-                pixmap.stroke_path(&pb.finish().ok_or(err_msg)?, paint, stroke, ts, None);
+                pixmap.stroke_path(&pb.finish().ok_or(err_msg)?, paint, stroke, trfm, None);
                 pb = skia::PathBuilder::new();  pb.move_to(start.x, start.y);
             }   stroke.width = width;
         }   process_segcmd(&mut pb, &cmd.instr);
     }
 
     pixmap.stroke_path(&pb.finish().ok_or("Fail build path from segments")?,
-        paint, stroke, ts, None);   Ok(())
+        paint, stroke, trfm, None);     Ok(())
 }
 
 fn segment_to_path(seg: &Segment, pb: &mut skia::PathBuilder) -> bool {
@@ -163,7 +165,7 @@ fn process_segcmd(pb: &mut skia::PathBuilder, cmd: &SegInstr) {
 }
 
 fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
-    style: &Style, ts: skia::Transform) ->
+    style: &Style, trfm: skia::Transform) ->
     Result<skia::Paint<'a>, &'static str> {
     impl From<RGBA8888> for skia::Color {  // XXX: why not use ColorU8 defaultly in skia?
         fn from(c: RGBA8888) -> Self { Self::from_rgba8(c.r, c.g, c.b, c.a) }
@@ -183,7 +185,7 @@ fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             paint.shader = skia::LinearGradient::new(points.0.into(), points.1.into(),
                 vec![ skia::GradientStop::new(0.0, img.lookup_color(cindex.0).into()),
                       skia::GradientStop::new(1.0, img.lookup_color(cindex.1).into()),
-                ],    skia::SpreadMode::Pad, ts)
+                ],    skia::SpreadMode::Pad, trfm)
                 .ok_or("Fail to create linear gradient shader")?;  //paint.anti_alias = false;
         }
         Style::RadialGradient { points, cindex } => {
@@ -195,7 +197,7 @@ fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             paint.shader = skia::RadialGradient::new(points.0.into(), points.1.into(), radius,
                 vec![ skia::GradientStop::new(0.0, img.lookup_color(cindex.0).into()),
                       skia::GradientStop::new(1.0, img.lookup_color(cindex.1).into()),
-                ],    skia::SpreadMode::Pad, ts)
+                ],    skia::SpreadMode::Pad, trfm)
                 .ok_or("Fail to create radial gradient shader")?;  //paint.anti_alias = false;
         }
     }   Ok(paint)

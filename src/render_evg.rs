@@ -22,9 +22,9 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
         let (surf, path) = (Surface::new(&mut pixm), VGPath::new());
         let mut pens = GF_PenSettings::default();
 
-        let ts = GF_Matrix2D {
+        let trfm = GF_Matrix2D {
             m: [scale.into(), 0.into(), 0.into(), 0.into(), scale.into(), 0.into()] };
-        surf.set_matrix(&ts);
+        surf.set_matrix(&trfm);
 
         for cmd in &self.commands {
             match cmd { Command::EndOfDocument => (),
@@ -32,15 +32,15 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     let mut iter = coll.iter();
                     if let Some(pt) = iter.next() { path.move_to((*pt).into()) }
                     iter.for_each(|pt| path.line_to((*pt).into()));  path.close();
-                    surf.fill_path(&path, &style_to_stencil(self, fill, &ts));
+                    surf.fill_path(&path, &style_to_stencil(self, fill));
                 }
                 Command::FillRects(FillCMD { fill, coll }) => {
-                    let sten = style_to_stencil(self, fill, &ts);
+                    let sten = style_to_stencil(self, fill);
                     coll.iter().for_each(|rect| path.add_rect(rect.into()));
                     surf.fill_path(&path, &sten);    //path.reset();
                 }
                 Command::FillPath (FillCMD { fill, coll }) => {
-                    let sten = style_to_stencil(self, fill, &ts);
+                    let sten = style_to_stencil(self, fill);
                     for seg in coll { let _ = segment_to_path(seg, &path); }
                     surf.fill_path(&path, &sten);    //path.reset();
                 }
@@ -48,7 +48,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     coll.iter().for_each(|line| {
                         path.move_to(line.start.into()); path.line_to(line.  end.into());
                     }); pens.width =  (*lwidth).into();
-                    surf.stroke_path(&path, &style_to_stencil(self, line, &ts), &pens);
+                    surf.stroke_path(&path, &style_to_stencil(self, line), &pens);
                 }
                 Command::DrawLoop (DrawCMD { line, lwidth, coll },
                     strip) => {     let mut iter = coll.iter();
@@ -56,11 +56,11 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     iter.for_each(|pt| path.line_to((*pt).into()));
 
                     if !*strip { path.close(); }    pens.width = (*lwidth).into();
-                    surf.stroke_path(&path, &style_to_stencil(self, line, &ts), &pens);
+                    surf.stroke_path(&path, &style_to_stencil(self, line), &pens);
                 }
                 Command::DrawPath (DrawCMD {
                     line, lwidth, coll }) => {
-                    let sten = style_to_stencil(self, line, &ts);
+                    let sten = style_to_stencil(self, line);
                     pens.width = (*lwidth).into();
 
                     for seg in coll {
@@ -74,14 +74,14 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     if let Some(pt) = iter.next() { path.move_to((*pt).into()) }
                     iter.for_each(|pt| path.line_to((*pt).into()));  path.close();
 
-                    surf.  fill_path(&path, &style_to_stencil(self, fill, &ts));
-                    surf.stroke_path(&path, &style_to_stencil(self, line, &ts), &pens);
+                    surf.  fill_path(&path, &style_to_stencil(self, fill));
+                    surf.stroke_path(&path, &style_to_stencil(self, line), &pens);
                 }
                 Command::OutlineRects(fill, DrawCMD {
                     line, lwidth, coll }) => {
                     pens.width = (*lwidth).into();
-                    let paint = style_to_stencil(self, fill, &ts);
-                    let pline = style_to_stencil(self, line, &ts);
+                    let paint = style_to_stencil(self, fill);
+                    let pline = style_to_stencil(self, line);
 
                     coll.iter().for_each(|rect| path.add_rect(rect.into()));
                     surf.  fill_path(&path, &paint);
@@ -89,8 +89,8 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 }
                 Command::OutlinePath (fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    let paint = style_to_stencil(self, fill, &ts);
-                    let pline = style_to_stencil(self, line, &ts);
+                    let paint = style_to_stencil(self, fill);
+                    let pline = style_to_stencil(self, line);
 
                     pens.width = (*lwidth).into();  let mut res = false;
                     for seg in coll { res = segment_to_path(seg, &path); }
@@ -155,8 +155,7 @@ fn process_segcmd(path: &VGPath, cmd: &SegInstr) {
     }
 }
 
-fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
-    style: &Style, ts: &GF_Matrix2D) -> Stencil {
+fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>, style: &Style) -> Stencil {
     impl From<RGBA8888> for GF_Color {
         fn from(color: RGBA8888) -> Self { // convert to 0xAARRGGBB
             (color.a as u32) << 24 | (color.r as u32) << 16 |
@@ -174,7 +173,7 @@ fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             sten.push_interpolation(0.into(), img.lookup_color(cindex.0).into());
             sten.push_interpolation(1.into(), img.lookup_color(cindex.1).into());
             sten.set_linear(points.0.into(), points.1.into());
-            sten.set_matrix(ts);    sten
+            sten    //sten.set_matrix(trfm);
         }
         Style::RadialGradient { points, cindex } => {
             let sten = Stencil::new(GF_STENCIL_RADIAL_GRADIENT);
@@ -184,7 +183,7 @@ fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             sten.push_interpolation(0.into(), img.lookup_color(cindex.0).into());
             sten.push_interpolation(1.into(), img.lookup_color(cindex.1).into());
             sten.set_radial(points.0.into(), points.1.into(), radius);
-            sten.set_matrix(ts);    sten
+            sten    //sten.set_matrix(trfm);
         }
     }
 }

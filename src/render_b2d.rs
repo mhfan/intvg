@@ -38,15 +38,15 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     let mut iter = coll.iter();
                     if let Some(pt) = iter.next() { path.moveTo(&(*pt).into()) }
                     iter.for_each(|pt| path.lineTo(&(*pt).into()));  path.close();
-                    ctx.fillGeometryExt(&path, convert_style(self, fill, scale).as_ref());
+                    ctx.fillGeometryExt(&path, convert_style(self, fill).as_ref());
                 }
                 Command::FillRects(FillCMD { fill, coll }) => {
-                    let style = convert_style(self, fill, scale);
+                    let style = convert_style(self, fill);
                     coll.iter().for_each(|rect| path.addRect(&rect.into()));
                     ctx.fillGeometryExt(&path, style.as_ref());  //path.reset();
                 }
                 Command::FillPath (FillCMD { fill, coll }) => {
-                    let style = convert_style(self, fill, scale);
+                    let style = convert_style(self, fill);
                     for seg in coll { let _ = segment_to_path(seg, &mut path); }
                     ctx.fillGeometryExt(&path, style.as_ref());  //path.reset();
                 }
@@ -54,7 +54,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     coll.iter().for_each(|line| {
                         path.moveTo(&line.start.into()); path.lineTo(&line.  end.into());
                     }); ctx.setStrokeWidth(*lwidth);
-                    ctx.strokeGeometryExt(&path, convert_style(self, line, scale).as_ref());
+                    ctx.strokeGeometryExt(&path, convert_style(self, line).as_ref());
                 }
                 Command::DrawLoop (DrawCMD { line, lwidth, coll },
                     strip) => {     let mut iter = coll.iter();
@@ -62,11 +62,11 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     iter.for_each(|pt| path.lineTo(&(*pt).into()));
 
                     if !*strip { path.close(); }    ctx.setStrokeWidth(*lwidth);
-                    ctx.strokeGeometryExt(&path, convert_style(self, line, scale).as_ref());
+                    ctx.strokeGeometryExt(&path, convert_style(self, line).as_ref());
                 }
                 Command::DrawPath (DrawCMD {
                     line, lwidth, coll }) => {
-                    let style = convert_style(self, line, scale);
+                    let style = convert_style(self, line);
                     ctx.setStrokeWidth(*lwidth);
 
                     for seg in coll {
@@ -79,13 +79,13 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     iter.for_each(|pt| path.lineTo(&(*pt).into()));  path.close();
 
                     ctx.setStrokeWidth(*lwidth);
-                    ctx.  fillGeometryExt(&path, convert_style(self, fill, scale).as_ref());
-                    ctx.strokeGeometryExt(&path, convert_style(self, line, scale).as_ref());
+                    ctx.  fillGeometryExt(&path, convert_style(self, fill).as_ref());
+                    ctx.strokeGeometryExt(&path, convert_style(self, line).as_ref());
                 }
                 Command::OutlineRects(fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    let paint = convert_style(self, fill, scale);
-                    let pline = convert_style(self, line, scale);
+                    let paint = convert_style(self, fill);
+                    let pline = convert_style(self, line);
                     ctx.setStrokeWidth(*lwidth);
 
                     coll.iter().for_each(|rect| path.addRect(&rect.into()));
@@ -94,8 +94,8 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 }
                 Command::OutlinePath (fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    let paint = convert_style(self, fill, scale);
-                    let pline = convert_style(self, line, scale);
+                    let paint = convert_style(self, fill);
+                    let pline = convert_style(self, line);
 
                     ctx.setStrokeWidth(*lwidth);    let mut res = false;
                     for seg in coll { res = segment_to_path(seg, &mut path); }
@@ -159,7 +159,7 @@ fn process_segcmd(path: &mut BLPath, cmd: &SegInstr) {
 }
 
 fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
-    style: &Style, scale: f32) -> Box<dyn B2DStyle> {
+    style: &Style) -> Box<dyn B2DStyle> {
     impl From<RGBA8888> for BLRgba32 {
         fn from(color: RGBA8888) -> Self { Self { value: // convert to 0xAARRGGBB
             (color.a as u32) << 24 | (color.r as u32) << 16 |
@@ -181,7 +181,7 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
                 &BLLinearGradientValues::new(&points.0.into(), &points.1.into()));
             linear.addStop(0.0, img.lookup_color(cindex.0).into());
             linear.addStop(1.0, img.lookup_color(cindex.1).into());
-            linear.scale(scale, scale);     Box::new(linear)
+            Box::new(linear)    //linear.scale(scale, scale);
         }
         Style::RadialGradient { points, cindex } => {
             let (dx, dy) = (points.1.x - points.0.x, points.1.y - points.0.y);
@@ -193,7 +193,7 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
                 &BLRadialGradientValues::new(&points.0.into(), &points.1.into(), radius));
             radial.addStop(0.0, img.lookup_color(cindex.0).into());
             radial.addStop(1.0, img.lookup_color(cindex.1).into());
-            radial.scale(scale, scale);     Box::new(radial)
+            Box::new(radial)    //radial.scale(scale, scale);
         }
     }
 }
