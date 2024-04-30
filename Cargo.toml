@@ -26,10 +26,17 @@ usvg  = "0.41"
 png = { version = "0.17", optional = true }
 
 winit  = { version = "0.29", optional = true }
+femtovg = { version = "0.9", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 glutin = { version = "0.31", optional = true } # offscreen@v0.29
 glutin-winit = { version = "0.4", optional = true }
 raw-window-handle = { version = "0.5", optional = true } # HasRawWindowHandle
-femtovg = { version = "0.9", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web_sys = { version = "0.3", package = "web-sys", features = [
+    "console", "WebGlContextAttributes",
+] }
 
 [lib]
 # Disable doctests as a workaround for https://github.com/rust-lang/rust-bindgen/issues/1313
@@ -46,7 +53,7 @@ ftg = []
 evg_fixed = [ "evg" ] # quite slow than floating point on Apple M1
 evg = [ "dep:png" ]
 
-nvg = [ "femtovg", "glutin", "winit", "glutin-winit", "raw-window-handle", "dep:png" ]
+nvg = [ "femtovg", "winit", "glutin", "glutin-winit", "raw-window-handle" ]
 
 #cc = [ "dep:cc", "dep:bindgen", "dep:glob" ]   # implied by optional dependency
 #default = [ "evg", "b2d" ] # XXX: ftg/ovg/nvg/ugl not completely work yet
@@ -65,10 +72,10 @@ criterion = "0.5"
 #rexpect = "0.5"
 
 [build-dependencies]
-cc = { version = "1.0", features = ["parallel"] }
+cc = { version = "1.0", features = [ "parallel" ] }
 bindgen = "0.69"
-glob = "0.3"
 chrono = "0.4"
+glob = "0.3"
 
 [profile.dev]
 opt-level = 1   # Enable a small amount of optimization in debug mode
