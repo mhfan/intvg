@@ -1,5 +1,5 @@
 /****************************************************************
- * $ID: tinyvg.rs   	Sat 27 Apr 2024 07:47:47+0800           *
+ * $ID: render.rs   	Sat 27 Apr 2024 07:47:47+0800           *
  *                                                              *
  * Maintainer: 范美辉 (MeiHui FAN) <mhfan@ustc.edu>              *
  * Copyright (c) 2024 M.H.Fan, All rights reserved.             *
@@ -8,11 +8,120 @@
 use {std::io, intvg::tinyvg::*};
 use web_sys::{CanvasRenderingContext2d as Contex2d, Path2d};
 
-pub fn render<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
-    scale: f32, ctx2d: &Contex2d) -> Result<(), &'static str> {
-    ctx2d.set_line_join("round");   ctx2d.scale(scale as _, scale as _).unwrap();
-    ctx2d.set_line_cap ("round");   ctx2d.set_miter_limit(4.0);
-    //tracing::info!("scaling factor: {scale}");
+pub fn render_svg(tree: &usvg::Tree, ctx2d: &Contex2d, cw: u32, ch: u32) {
+    let (tw, th) = (tree.size().width() as f64, tree.size().height() as f64);
+    let scale = (cw as f64 / tw).min(ch as f64 / th);
+
+    ctx2d.reset();  //ctx2d.clear_rect(0.0, 0.0, cw as _, ch as _);
+    let _ = ctx2d.translate((cw as f64 - scale * tw) / 2., (ch as f64 - scale * th) / 2.);
+    let _ = ctx2d.scale(scale, scale);  ctx2d.set_line_join("round");
+    ctx2d.set_miter_limit(4.0);         ctx2d.set_line_cap ("round");
+
+    convert_nodes(ctx2d, tree.root(), &usvg::Transform::default());
+}
+
+fn convert_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) {
+    for child in parent.children() { match child {
+        usvg::Node::Group(group) =>     // trfm is needed on rendering only
+            convert_nodes(ctx2d, group, &trfm.pre_concat(group.transform())),
+
+        usvg::Node::Path(path) => {
+            let tpath = if trfm.is_identity() { None
+            } else { path.data().clone().transform(*trfm) };
+            let fpath = Path2d::new().unwrap();
+
+            for seg in tpath.as_ref().unwrap_or(path.data()).segments() {
+                use usvg::tiny_skia_path::PathSegment;
+                match seg {     PathSegment::Close => fpath.close_path(),
+                    PathSegment::MoveTo(pt) => fpath.move_to(pt.x as _, pt.y as _),
+                    PathSegment::LineTo(pt) => fpath.line_to(pt.x as _, pt.y as _),
+
+                    PathSegment::QuadTo(ctrl, end) => fpath.quadratic_curve_to(
+                        ctrl.x as _, ctrl.y as _, end.x as _, end.y as _),
+                    PathSegment::CubicTo(ctrl0, ctrl1, end) =>
+                        fpath.bezier_curve_to(ctrl0.x as _, ctrl0.y as _,
+                            ctrl1.x as _, ctrl1.y as _, end.x as _, end.y as _),
+                }
+            }
+
+            if let Some(fill) = path.fill() {
+                if let Some(style) = convert_paint(ctx2d, fill.paint(),
+                    fill.opacity(), trfm) { ctx2d.set_fill_style(&style); }
+
+                ctx2d.fill_with_path_2d_and_winding(&fpath, match fill.rule() {
+                    usvg::FillRule::NonZero => web_sys::CanvasWindingRule::Nonzero,
+                    usvg::FillRule::EvenOdd => web_sys::CanvasWindingRule::Evenodd,
+                }); //ctx2d.fill_with_path_2d(&fpath);
+            }
+
+            if let Some(stroke) = path.stroke() {
+                if let Some(style) = convert_paint(ctx2d, stroke.paint(),
+                    stroke.opacity(), trfm) { ctx2d.set_stroke_style(&style); }
+
+                ctx2d.set_line_width (stroke.width().get() as _);
+                ctx2d.set_miter_limit(stroke.miterlimit().get() as _);
+                ctx2d.set_line_join(match stroke.linejoin() { usvg::LineJoin::MiterClip |
+                    usvg::LineJoin::Miter => "miter",
+                    usvg::LineJoin::Round => "round",
+                    usvg::LineJoin::Bevel => "bevel",
+                });
+                ctx2d.set_line_cap (match stroke.linecap () {
+                    usvg::LineCap::Butt   => "butt",
+                    usvg::LineCap::Round  => "round",
+                    usvg::LineCap::Square => "square",
+                }); ctx2d.stroke_with_path(&fpath);
+            }
+        }
+
+        usvg::Node::Image(_) => eprintln!("Not support image node"),
+        usvg::Node::Text(text) => { let group = text.flattened();
+            convert_nodes(ctx2d, group, &trfm.pre_concat(group.transform()));
+        }
+    } }
+}
+
+fn convert_paint(ctx2d: &Contex2d, paint: &usvg::Paint,
+    opacity: usvg::Opacity, _trfm: &usvg::Transform) -> Option<wasm_bindgen::JsValue> {
+    fn to_css_color(color: usvg::Color, opacity: usvg::Opacity) -> String {
+        let mut str = format!("#{:0<2x}{:0<2x}{:0<2x}",
+            color.red, color.green, color.blue);
+        if opacity != 1.0 { str.push_str(&format!("{:0<2x}",
+            (opacity.get() * 255.) as u8)); }   str
+    }
+
+    Some(match paint { usvg::Paint::Pattern(_) => { // trfm should be applied here
+            eprintln!("Not support pattern painting"); return None }
+        usvg::Paint::Color(color) => to_css_color(*color, opacity).into(),
+
+        usvg::Paint::LinearGradient(grad) => {
+            let linear = ctx2d.create_linear_gradient(
+                grad.x1() as _, grad.y1() as _, grad.x2() as _, grad.y2() as _);
+
+            grad.stops().iter().for_each(|stop| { let _ = linear.add_color_stop(0.0,
+                &to_css_color(stop.color(), stop.opacity() * opacity));
+            }); linear.into()
+        }
+        usvg::Paint::RadialGradient(grad) => {
+             let radial = ctx2d.create_radial_gradient(
+                grad.cx() as _, grad.cy() as _, 1., // XXX:
+                grad.fx() as _, grad.fy() as _, grad.r().get() as _).unwrap();
+
+            grad.stops().iter().for_each(|stop| { let _ = radial.add_color_stop(0.0,
+                &to_css_color(stop.color(), stop.opacity() * opacity));
+            }); radial.into()
+        }
+    })
+}
+
+pub fn render_tvg<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
+    ctx2d: &Contex2d, cw: u32, ch: u32) {
+    let (tw, th) = (tvg.header.width as f64, tvg.header.height as f64);
+    let scale = (cw as f64 / tw).min(ch as f64 / th);
+
+    ctx2d.reset();  //ctx2d.clear_rect(0.0, 0.0, cw as _, ch as _);
+    let _ = ctx2d.translate((cw as f64 - scale * tw) / 2., (ch as f64 - scale * th) / 2.);
+    let _ = ctx2d.scale(scale, scale);  ctx2d.set_line_join("round");
+    ctx2d.set_miter_limit(4.0);         ctx2d.set_line_cap ("round");
 
     for cmd in &tvg.commands {
         let mut path = Path2d::new().unwrap();
@@ -29,13 +138,13 @@ pub fn render<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
                 ctx2d.set_fill_style(&convert_style(tvg, ctx2d, fill));
                 coll.iter().for_each(|rect| {
                     path.rect(rect.x as _, rect.y as _, rect.w as _, rect.h as _);
-                }); ctx2d.fill_with_path_2d(&path); //path = Path2d::new().unwrap();
+                }); ctx2d.fill_with_path_2d(&path);
             }
             Command::FillPath (FillCMD { fill, coll }) => {
                 ctx2d.set_fill_style(&convert_style(tvg, ctx2d, fill));
                 for seg in coll {   let _ = segment_to_path(seg, &path);
                     //if res { return Err("Got line width in fill path segment") }
-                }   ctx2d.fill_with_path_2d(&path); //path = Path2d::new().unwrap();
+                }   ctx2d.fill_with_path_2d(&path);
             }
             Command::DrawLines(DrawCMD { line, lwidth, coll }) => {
                 ctx2d.set_stroke_style(&convert_style(tvg, ctx2d, line));
@@ -69,8 +178,7 @@ pub fn render<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
                 ctx2d.set_line_width(*lwidth as _);     path.close_path();
                 ctx2d.set_fill_style  (&convert_style(tvg, ctx2d, fill));
                 ctx2d.set_stroke_style(&convert_style(tvg, ctx2d, line));
-                ctx2d.fill_with_path_2d(&path);
-                ctx2d.stroke_with_path (&path);
+                ctx2d.fill_with_path_2d(&path);     ctx2d.stroke_with_path (&path);
             }
             Command::OutlineRects(fill, DrawCMD {
                 line, lwidth, coll }) => {
@@ -81,7 +189,7 @@ pub fn render<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
                 coll.iter().for_each(|rect| {
                     path.rect(rect.x as _, rect.y as _, rect.w as _, rect.h as _);
                 }); ctx2d.fill_with_path_2d(&path);
-                    ctx2d.stroke_with_path (&path); //path = Path2d::new().unwrap();
+                    ctx2d.stroke_with_path (&path);
             }
             Command::OutlinePath (fill, DrawCMD {
                 line, lwidth, coll }) => {
@@ -98,7 +206,7 @@ pub fn render<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
                 }
             }
         }
-    }   Ok(())
+    }
 }
 
 fn stroke_segment_path(seg: &Segment, ctx2d: &Contex2d) {
@@ -192,8 +300,8 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
         Style::LinearGradient { points, cindex } => {
             let linear = ctx2d.create_linear_gradient(
                 points.0.x as _, points.0.y as _, points.1.x as _, points.1.y as _);
-            linear.add_color_stop(0.0, &to_css_color(img, cindex.0)).unwrap();
-            linear.add_color_stop(1.0, &to_css_color(img, cindex.1)).unwrap();  linear.into()
+            let _ = linear.add_color_stop(0.0, &to_css_color(img, cindex.0));
+            let _ = linear.add_color_stop(1.0, &to_css_color(img, cindex.1));   linear.into()
         }   // don't need to scale, since created in context
         Style::RadialGradient { points, cindex } => {
             let (dx, dy) = (points.1.x - points.0.x, points.1.y - points.0.y);
@@ -202,10 +310,10 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
                          else { (dx * dx + dy * dy).sqrt() };
 
             let radial = ctx2d.create_radial_gradient(
-                points.0.x as _, points.0.y as _, 1.0,  // XXX:
+                points.0.x as _, points.0.y as _, 1.,   // XXX:
                 points.1.x as _, points.1.y as _, radius as _).unwrap();
-            radial.add_color_stop(0.0, &to_css_color(img, cindex.0)).unwrap();
-            radial.add_color_stop(1.0, &to_css_color(img, cindex.1)).unwrap();  radial.into()
+            let _ = radial.add_color_stop(0.0, &to_css_color(img, cindex.0));
+            let _ = radial.add_color_stop(1.0, &to_css_color(img, cindex.1));   radial.into()
         }
     }
 }

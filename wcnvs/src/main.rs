@@ -58,6 +58,20 @@ fn app() -> Element {
         }
     };
 
+    fn draw_perf(ctx2d: &CanvasRenderingContext2d, fps: f32) {
+        ctx2d.save();   let _ = ctx2d.reset_transform();
+        let _ = ctx2d.translate(3., 3.);
+        ctx2d.set_fill_style(&"#00000080".into());
+        ctx2d.fill_rect(0., 0., 100., 20.);
+
+        ctx2d.set_text_align("right");
+        ctx2d.set_text_baseline("top");
+        ctx2d.set_font("14px sans-serif");
+        ctx2d.set_fill_style(&"#f0f0f0f0".into());
+        let _ = ctx2d.fill_text(&format!("{:.2} FPS", fps), 100. - 10., 2.);
+        ctx2d.restore();
+    }
+
     rsx! { style { dangerous_inner_html: format_args!("{}", // XXX:
             //"html { background-color: #15191D; color: #DCDCDC; }
             // body { font-family: Courier, Monospace; text-align: center; height: 100vh; }"
@@ -70,33 +84,32 @@ fn app() -> Element {
         canvas { id: "canvas", onmounted: canvas_demo }
         input { r#type: "file", accept: ".tvg, .svg", id: "picker",
             onchange: move |evt| async move { if let Some(feng) = &evt.files() {
-                let data = feng.read_file(&feng.files()[0]).await.unwrap();
-
-                use intvg::{convert::Convert, tinyvg::TVGBuf};
-                let tvg = if evt.value().ends_with(".svg") { TVGBuf::from_usvg(&data).unwrap()
-                } else { TVGBuf::load_data(&mut std::io::Cursor::new(&data)).unwrap() };
-                tracing::info!("picked file: {}, {:?} with {} bytes\nTinyVG: {:?}",
-                    evt.value(), feng.files(), data.len(), tvg.header);
-
                 let canvas = web_sys::window().unwrap().document().unwrap()
                     .get_element_by_id("canvas").unwrap()
                     .dyn_into::<HtmlCanvasElement>().unwrap();
                 let ctx2d = canvas.get_context("2d").unwrap().unwrap()
                     .dyn_into::<CanvasRenderingContext2d>().unwrap();
-                ctx2d.reset();
 
-                //let bounding = canvas.get_bounding_client_rect();
-                tracing::info!("canvas size: {} x {}; client: {} x {}", canvas.width(),
-                    canvas.height(), canvas.client_width(), canvas.client_height());
-                ctx2d.clear_rect(0.0, 0.0, canvas.width() as _, canvas.height() as _);
+                let data = feng.read_file(&feng.files()[0]).await.unwrap();
+                use {intvg::tinyvg::TVGBuf, instant::Instant};
 
-                let scale = (canvas.width()  as f32  / tvg.header.width  as f32)
-                        .min(canvas.height() as f32  / tvg.header.height as f32);
-                let _ = ctx2d.translate(
-                    ((canvas.width()  as f32 - scale * tvg.header.width  as f32) / 2.) as _,
-                    ((canvas.height() as f32 - scale * tvg.header.height as f32) / 2.) as _);
+                let tvg = if evt.value().ends_with(".svg") {
+                    let mut fontdb = usvg::fontdb::Database::new(); fontdb.load_system_fonts();
+                    let tree = usvg::Tree::from_data(&data,
+                        &usvg::Options::default(), &fontdb).unwrap();
 
-                wcnvs::tinyvg::render(&tvg, scale, &ctx2d).unwrap();
+                    let now = Instant::now();
+                    wcnvs::render::render_svg(&tree, &ctx2d, canvas.width(), canvas.height());
+                    draw_perf(&ctx2d, 1. / (Instant::now() - now).as_secs_f32());
+
+                    return //intvg::convert::Convert::from_usvg(&data).unwrap()
+                } else { TVGBuf::load_data(&mut std::io::Cursor::new(&data)).unwrap() };
+                tracing::info!("picked file: {}, {:?} with {} bytes\nTinyVG: {:?}",
+                    evt.value(), feng.files(), data.len(), tvg.header);
+
+                let now = Instant::now();
+                wcnvs::render::render_tvg(&tvg, &ctx2d, canvas.width(), canvas.height());
+                draw_perf(&ctx2d, 1. / (Instant::now() - now).as_secs_f32());
             } }
         }
     }
@@ -107,7 +120,7 @@ fn app() -> Element {
 #[derive(Clone, Routable, Debug, PartialEq)] enum Route {
     #[route("/blog/:id")] Blog { id: i32 },
     #[route("/")] Home {},
-}       
+}
 
 #[component] fn Blog(id: i32) -> Element {
     rsx!(Link { to: Route::Home {}, "Go to counter" } "Blog post {id}")

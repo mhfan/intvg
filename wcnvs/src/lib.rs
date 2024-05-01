@@ -5,5 +5,5 @@
  * Copyright (c) 2024 M.H.Fan, All rights reserved.             *
  ****************************************************************/
 
-pub mod tinyvg;
+pub mod render;
 
