@@ -73,8 +73,8 @@ pub type TVGImage = TVGFile;
 
 pub struct TinyVG<R: io::Read, W: io::Write> {
     pub header: Header,     // In-memory representation of a TinyVG file
-    color_table:  Vec<RGBA8888>,    // colors used in this image
-    pub commands: Vec<Command>,     // commands required to render this image
+    pub color_table:  Vec<RGBA8888>,    // colors used in this image
+    pub commands: Vec<Command>,         // commands required to render this image
     pub trailer:  Vec<u8>,  // Remaining data after the TinyVG image ended (EOF).
     // Can be used for arbitrary metadata, it is not defined by the spec.
 
@@ -88,8 +88,8 @@ pub struct TinyVG<R: io::Read, W: io::Write> {
 impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_default)]
     pub(crate) fn new() -> Self { Self {
             header: Header { //magic: TVG_MAGIC, version: TVG_VERSION,
-                scale: 0, color_encoding: ColorEncoding::RGBA8888,
-                coordinate_range: CoordinateRange::Default,
+                scale: 0, color_fmt: ColorEncoding::RGBA8888,
+                coord_range: CoordinateRange::Default,
                 width: 0, height: 0, //color_count: VarUInt(0),
             },  color_table: vec![], commands: vec![], trailer: vec![],
 
@@ -119,7 +119,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
         let val = reader.read_u8()?;   tvgd.header.scale = val & 0x0F;
         // TODO: scale rendering by change tvgd.header.scale?
 
-        tvgd.header.coordinate_range = match val >> 6 {
+        tvgd.header.coord_range = match val >> 6 {
             0 => { //tvgd.write_range = Self::write_default;
                    //tvgd. read_range = Self:: read_default;
                                                             CoordinateRange::Default  }
@@ -136,7 +136,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
         let color_count = reader.read_var_uint()?;
         tvgd.color_table.reserve_exact(color_count as _);
 
-        tvgd.header.color_encoding = ColorEncoding::RGBA8888;
+        tvgd.header.color_fmt = ColorEncoding::RGBA8888;
         match (val >> 4) & 0x03 {   // XXX: unified to RGBA8888
             0 => for _ in 0..color_count { tvgd.color_table.push(RGBA8888 {
                     r: reader.read_u8()?, g: reader.read_u8()?,
@@ -157,13 +157,16 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
             x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
                 msg: "custom color encoding is not supported" }) //ColorEncoding::Custom,
-        }   eprintln!("{:?}", &tvgd.header);
+        }
 
         loop {  let cmd = tvgd.read_command(reader)?;
             if let Command::EndOfDocument = cmd {
                 reader.read_to_end(&mut tvgd.trailer)?; break
             }   tvgd.commands.push(cmd);
-        }    Ok(tvgd)
+        }
+
+        println!("{:?}, {} colors, {} cmds/paths", &tvgd.header,
+            tvgd.color_table.len(), tvgd.commands.len());   Ok(tvgd)
     }
 
     fn read_command(&self, reader: &mut R) -> Result<Command> {
@@ -322,14 +325,14 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
     pub fn save_data(&self, writer: &mut W) -> Result<()> {
         writer.write_u16_le(TVG_MAGIC)?;    writer.write_u8(TVG_VERSION)?;
-        writer.write_u8((self.header.coordinate_range as u8) << 6 |
-                        (self.header.color_encoding   as u8) << 4 | self.header.scale)?;
+        writer.write_u8((self.header.coord_range as u8) << 6 |
+                        (self.header.color_fmt   as u8) << 4 | self.header.scale)?;
 
         (self.write_range)(writer, self.header.width  as _)?;
         (self.write_range)(writer, self.header.height as _)?;
         writer.write_var_uint(self.color_table.len()  as _)?;
 
-        match self.header.color_encoding {  //ColorEncoding::Custom => (),
+        match self.header.color_fmt {  //ColorEncoding::Custom => (),
             ColorEncoding::RGBA8888 => for color in &self.color_table {
                     writer.write_u8(color.r)?; writer.write_u8(color.g)?;
                     writer.write_u8(color.b)?; writer.write_u8(color.a)?;
@@ -526,11 +529,11 @@ const TVG_VERSION: u8 = 1;
     pub scale: u8,  // u4, Defines the number of fraction bits in a _Unit_ value.
 
     // u2, Defines the type of color information that is used in the _color table_.
-    pub color_encoding: ColorEncoding,
+    pub color_fmt: ColorEncoding,
 
     // u2, Defines the number of total bits in a _Unit_ value
     // and thus the overall precision of the file.
-    pub coordinate_range: CoordinateRange,
+    pub coord_range: CoordinateRange,
 
     // Encodes the maximum width/height of the output file in _display units_.
     // A value of 0 indicates that the image has the maximum possible width.

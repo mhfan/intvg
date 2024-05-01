@@ -23,11 +23,23 @@ Build controlled by feature `"b2d"`.
 
 A built-in Rust binding for Blend2D, simpler than outdated [blend2d-rs](https://github.com/Veykril/blend2d-rs).
 
+## A SVG Renderer/Viewer powered by [Femtovg](https://github.com/Femtovg/Femtovg)
+
+Build controlled by feature `"nvg"`.
+
+Refer to the SVG example in Femotovg, updated, rewritten and optimized the code.
+
+## Another SVG/TinyVG Viewer based on [HTML5/Web 2D Canvas API](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API)
+
+In the sub-crate `wcnvs`.
+
 ## Rendering performance comparison
 
 |  2D Engine |   Timing | Performance | Note             |
 |        --: |      --: |         --: | :--              |
+|   Femtovg: |  1.65 ms |   606.8 fps | max performance  |
 |   Blend2D: |  1.94 ms |   515.5 fps | float/double     |
+| CanvasAPI: |  2.00 ms |   500.0 fps | bad T accuracy?  |
 | tiny_skia: |  5.10 ms |   195.9 fps |                  |
 |  GPAC/EVG: |  7.96 ms |   125.6 fps | floating point   |
 |  GPAC/EVG: | 18.07 ms |    55.3 fps | fixed-point math |

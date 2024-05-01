@@ -31,7 +31,8 @@ impl<R: io::Read, W: io::Write> Convert for TinyVG<R, W> {
         // XXX: still need a traversely check CoordinateRange by a null writer?
 
         convert_nodes(&mut tvg, tree.root(), &usvg::Transform::default());
-        eprintln!("{:?}", &tvg.header);     Ok(tvg)
+        println!("{:?}, {} colors, {} cmds/paths", &tvg.header,
+            tvg.color_table.len(), tvg.commands.len());     Ok(tvg)
     }
 }
 
