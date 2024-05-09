@@ -42,34 +42,30 @@ impl From<TryFromIntError> for TVGError {
     fn from(e: TryFromIntError) -> Self { Self { kind: ErrorKind::IntError(e), msg: "" } }
 }
 
-//  https://tinyvg.tech/download/specification.txt, https://github.com/TinyVG/sdk
-//  https://github.com/lily-mara/tinyvg-rs, https://github.com/dataphract/tinyvg-rs
-//
-//  TinyVG files are made up of a header, followed by a color lookup table
-//  and a sequence of commands terminated by a _end of file_ command.
-//
-//  - All integers are assumed to be encoded in little-endian byte order
-//  if not specified otherwise.
-//
-//  - The _Type_ fields have no padding bits in between. If a field
-//  does not align to a byte boundary, the next field will be offset
-//  into the byte by the current fields bit offset + bit size.
-//  This means, that two consecutive fields A (u3) and B (u5) can be
-//  extracted from the byte by using (byte & 0x7) >> 0 for A and
-//  (byte & 0xF8) >> 3 for B.
-//
-//  - If not specified otherwise, all coordinates in TinyVG are absolute
-//  coordinates, including path nodes and gradients.
-//
-//  - A lot of encoded integers are encoded off-by-one, thus mapping 0 to
-//  1, 1 to 2 and so on. This is done as encoding these integers as 0
-//  would be equivalent to removing the element from the file.
-//  Thus, this can be used to encode some more elements with less bytes.
-//  If this is the case, this is signaled by the use of value+1.
-
-pub type TVGBuf<'a> = TinyVG<io::Cursor<&'a [u8]>, io::Cursor<Vec<u8>>>;
-pub type TVGFile = TinyVG<io::BufReader<std::fs::File>, io::BufWriter<std::fs::File>>;
-pub type TVGImage = TVGFile;
+/// **TinyVG** files are made up of a header, followed by a color lookup table
+/// and a sequence of commands terminated by a _end of file_ command.
+///
+/// - All integers are assumed to be encoded in little-endian byte order
+/// if not specified otherwise.
+///
+/// - The _Type_ fields have no padding bits in between. If a field
+/// does not align to a byte boundary, the next field will be offset
+/// into the byte by the current fields bit offset + bit size.
+/// This means, that two consecutive fields A (u3) and B (u5) can be
+/// extracted from the byte by using (byte & 0x7) >> 0 for A and
+/// (byte & 0xF8) >> 3 for B.
+///
+/// - If not specified otherwise, all coordinates in TinyVG are absolute
+/// coordinates, including path nodes and gradients.
+///
+/// - A lot of encoded integers are encoded off-by-one, thus mapping 0 to
+/// 1, 1 to 2 and so on. This is done as encoding these integers as 0
+/// would be equivalent to removing the element from the file.
+/// Thus, this can be used to encode some more elements with less bytes.
+/// If this is the case, this is signaled by the use of value+1.
+///
+/// https://tinyvg.tech/download/specification.txt, https://github.com/TinyVG/sdk,
+/// https://github.com/lily-mara/tinyvg-rs, https://github.com/dataphract/tinyvg-rs
 
 pub struct TinyVG<R: io::Read, W: io::Write> {
     pub header: Header,     // In-memory representation of a TinyVG file
@@ -82,6 +78,10 @@ pub struct TinyVG<R: io::Read, W: io::Write> {
      read_range: fn(&mut R) ->  io::Result<i32>,
     //_reader: PhantomData<R>, _writer: PhantomData<W>,
 }
+
+pub type TVGBuf<'a> = TinyVG<io::Cursor<&'a [u8]>, io::Cursor<Vec<u8>>>;
+pub type TVGFile = TinyVG<io::BufReader<std::fs::File>, io::BufWriter<std::fs::File>>;
+pub type TVGImage = TVGFile;
 
 //impl<R: io::Read, W: io::Write> Default for Image<R, W> { fn default() -> Self { Self::new() } }
 
@@ -528,44 +528,43 @@ const TVG_VERSION: u8 = 1;
 
     pub scale: u8,  // u4, Defines the number of fraction bits in a _Unit_ value.
 
-    // u2, Defines the type of color information that is used in the _color table_.
+    /// u2, Defines the type of color information that is used in the _color table_.
     pub color_fmt: ColorEncoding,
 
-    // u2, Defines the number of total bits in a _Unit_ value
-    // and thus the overall precision of the file.
+    /// u2, Defines the number of total bits in a _Unit_ value
+    /// and thus the overall precision of the file.
     pub coord_range: CoordinateRange,
 
-    // Encodes the maximum width/height of the output file in _display units_.
-    // A value of 0 indicates that the image has the maximum possible width.
-    // The size of these two fields depends on the coordinate range field.
+    /// Encodes the maximum width/height of the output file in _display units_.
+    /// A value of `0` indicates that the image has the maximum possible width.
+    /// The size of these two fields depends on the _coordinate range_ field.
     pub width: u32, pub height: u32,    // u8, u16 or u32
 
     //color_count: VarUInt,   // The number of colors in the _color table_.
 }
 
-//  VarUInt:
-//  This type is used to encode 32 bits unsigned integers while keeping the
-//  number of bytes low. It is encoded as a variable-sized integer that uses
-//  7 bits per byte for integer bits and the 7th bits to encode that there is
-//  "more bits available".
-//
-//  The integer is still built as a little-endian, so the first byte will
-//  always encode bits 0…6, the second one encodes 8…13, and so on.
-//  Bytes are read until the uppermost bit in the byte is not set.
-//
-//  The bit mappings are done as following:
-//  Byte   Bit Range   Notes
-//  ----   ---------   ------------------------------------------------------------------
-//  #1     0…6         This byte must always be present.
-//  #2     7…13
-//  #3     14…20
-//  #4     21…27
-//  #5     28…31       This byte must always have the uppermost 4 bits set as 0b0000????.
-//
-//  So a VarUInt always has between 1 and 5 bytes while mapping the full
-//  range of a 32 bits value. This means we only have 5 bits overhead in the
-//  worst case, but for all smaller values, we reduce the number of bytes
-//  for encoding unsigned integers.
+/// **VarUInt**:
+/// This type is used to encode 32 bits unsigned integers while keeping the number
+/// of bytes low. It is encoded as a variable-sized integer that uses 7 bits per byte
+/// for integer bits and the 7th bits to encode that there is "more bits available".
+///
+/// The integer is still built as a little-endian, so the first byte will always encode
+/// bits 0…6, the second one encodes 8…13, and so on.
+/// Bytes are read until the uppermost bit in the byte is not set.
+///
+/// The bit mappings are done as following:
+///
+/// Byte | Bit Range | Notes
+/// ---- | --------- | ------------------------------------------------------------------
+/// #1   | 0…6       | This byte must always be present.
+/// #2   | 7…13      |
+/// #3   | 14…20     |
+/// #4   | 21…27     |
+/// #5   | 28…31     | This byte must always have the uppermost 4 bits set as 0b0000????.
+///
+/// So a VarUInt always has between 1 and 5 bytes while mapping the full range of
+/// a 32 bits value. This means we only have 5 bits overhead in the worst case, but for
+/// all smaller values, we reduce the number of bytes for encoding unsigned integers.
 //#[derive(Clone, Copy)] struct VarUInt(u32);
 type VarUInt = u32;
 
@@ -633,22 +632,16 @@ impl<R: io::Read>  TVGRead  for R {}
 // color channel between 0 and 100% intensity, mapped to value range
 //use tiny_skia::{ColorU8, Color, Rect, Point};     // XXX: tiny_skia_path
 
-//  Commands:
-//  TinyVG files contain a sequence of draw commands that must be executed
-//  in the defined order to get the final result. Each draw command adds
-//  a new 2D primitive to the graphic.
-//
-//  Each command is encoded as a single byte which is split into fields:
-//  Field             Type   Description
-//  ---------------   ----   -------------------------------------------------------
-//  command_index     u6     The command that is encoded next. See table above.
-//  prim_style_kind   u2     The type of style this command uses as a primary style.
-
-pub struct FillCMD<T> { pub fill: Style, pub coll: Vec<T> }     // line -> stroke
-pub struct DrawCMD<T> { pub line: Style, pub lwidth: Unit, pub coll: Vec<T> }
-//  Each line is line_width units wide, and at least a single display pixel.
-//  This means that line_width of 0 is still visible, even though only marginally.
-
+/// **Commands**:
+/// TinyVG files contain a sequence of draw commands that must be executed in the defined
+/// order to get the final result. Each draw command adds a new 2D primitive to the graphic.
+///
+/// Each command is encoded as a single byte which is split into fields:
+///
+/// Field           | Type | Description
+/// --------------- | ---- | -------------------------------------------------------
+/// command_index   | u6   | The command that is encoded next. See table above.
+/// prim_style_kind | u2   | The type of style this command uses as a primary style.
 pub enum Command { EndOfDocument,
     FillPolyg(FillCMD<Point>), FillRects(FillCMD<Rect>), FillPath(FillCMD<Segment>),
     DrawLines(DrawCMD<Line>),  DrawLoop (DrawCMD<Point>, bool), //DrawStrip(DrawCMD<Point>),
@@ -656,12 +649,17 @@ pub enum Command { EndOfDocument,
     OutlineRects(Style, DrawCMD<Rect>), OutlinePath (Style, DrawCMD<Segment>),
 }
 
+pub struct FillCMD<T> { pub fill: Style, pub coll: Vec<T> }     // line -> stroke
+/// Each line is line_width units wide, and at least a single display pixel.
+/// This means that line_width of 0 is still visible, even though only marginally.
+pub struct DrawCMD<T> { pub line: Style, pub lwidth: Unit, pub coll: Vec<T> }
+
 pub enum Style { FlatColor(VarUInt),   // color_index in the color_table
     LinearGradient { points: (Point, Point), cindex: (VarUInt, VarUInt), },
+    /// The gradient is formed by a mental circle with the center at point_0 and
+    /// point_1 being somewhere on the circle outline. Thus, the radius of said
+    /// circle is the distance between point_0 and point_1.
     RadialGradient { points: (Point, Point), cindex: (VarUInt, VarUInt), },
-    // The gradient is formed by a mental circle with the center at point_0 and
-    // point_1 being somewhere on the circle outline. Thus, the radius of said
-    // circle is the distance between point_0 and point_1.
 }
 
 impl Style {
@@ -672,52 +670,47 @@ impl Style {
 
 pub struct Line { pub start: Point, pub end: Point, }
 
-//  Point:
-//  Points are a X and Y coordinate pair:
-//  Field   Type     Description
-//  -----   ------   -----------------------------------------------
-//  x       _Unit_   Horizontal distance of the point to the origin.
-//  y       _Unit_   Vertical   distance of the point to the origin.
-//
-//  Units:
-//  The unit is the common type for both positions and sizes in the vector
-//  graphic. It is encoded as a signed integer with a configurable amount of
-//  bits (see _Coordinate Range_) and fractional bits.
-//
-//  The file header defines a _scale_ by which each signed integer is
-//  divided into the final value. For example, with a _reduced_ value of
-//  0x13 and a scale of 4, we get the final value of 1.1875, as the number
-//  is interpretet as binary b0001.0011.
+/// **Point**: Points are a X and Y coordinate pair.
+///
+/// Field | Type   | Description
+/// ----- | ------ | -----------------------------------------------
+/// x     | _Unit_ | Horizontal distance of the point to the origin.
+/// y     | _Unit_ | Vertical   distance of the point to the origin.
+///
+/// **Units**:
+/// The unit is the common type for both positions and sizes in the vector graphic.
+/// It is encoded as a signed integer with a configurable amount of bits
+/// (see _Coordinate Range_) and fractional bits.
+///
+/// The file header defines a _scale_ by which each signed integer is divided into
+/// the final value. For example, with a _reduced_ value of 0x13 and a scale of 4,
+/// we get the final value of 1.1875, as the number is interpretet as binary b0001.0011.
 #[derive(Clone, Copy)] pub struct Point { pub x: Unit, pub y: Unit }
 #[derive(Clone, Copy)] pub struct Rect  { pub x: Unit, pub y: Unit, pub w: Unit, pub h: Unit }
 
-//  Paths describe instructions to create complex 2D graphics.
-//
-//  The mental model to form the path is this:
-//  Each path segment generates a shape by moving a "pen" around.
-//  The path this "pen" takes is the outline of our segment. Each segment,
-//  the "pen" starts at a defined position and is moved by instructions.
-//  Each instruction will leave the "pen" at a new position.
-//  The line drawn by our "pen" is the outline of the shape.
-//
-//  1.  For each segment in the path, the number of commands is encoded as a
-//      VarUInt-1. Decoding a 0 means that 1 element is stored in the segment.
-//
-//  2.  For each segment in the path:
-//
-//      1.  A Point is encoded as the starting point.
-//
-//      2.  The instructions for this path, the number is determined in the
-//          first step.
-//
-//      3.  Each instruction is prefixed by a single tag byte that encodes
-//          the kind of instruction as well as the information if a line
-//          width is present.
-//
-//      4.  If a line width is present, that line width is read as a Unit
-//
-//      5.  The data for this command is decoded.
-
+/// **Paths** describe instructions to create complex 2D graphics.
+///
+/// The mental model to form the path is this:
+/// Each path segment generates a shape by moving a "pen" around. The path this "pen" takes
+/// is the outline of our segment. Each segment, the "pen" starts at a defined position and
+/// is moved by instructions. Each instruction will leave the "pen" at a new position.
+/// The line drawn by our "pen" is the outline of the shape.
+///
+/// 1.  For each segment in the path, the number of commands is encoded as a VarUInt-1.
+///     Decoding a 0 means that 1 element is stored in the segment.
+///
+/// 2.  For each segment in the path:
+///
+///     1) A Point is encoded as the starting point.
+///
+///     2) The instructions for this path, the number is determined in the first step.
+///
+///     3) Each instruction is prefixed by a single tag byte that encodes the kind of
+///        instruction as well as the information if a line width is present.
+///
+///     4) If a line width is present, that line width is read as a Unit
+///
+///     5) The data for this command is decoded.
 pub struct Segment { pub start: Point, pub cmds: Vec<SegmentCommand>, }
 
 pub struct SegmentCommand { pub instr: SegInstr, pub lwidth: Option<Unit>, }
