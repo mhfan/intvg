@@ -102,9 +102,11 @@ fn convert_paint(ctx2d: &Contex2d, paint: &usvg::Paint,
             }); linear.into()
         }
         usvg::Paint::RadialGradient(grad) => {
-             let radial = ctx2d.create_radial_gradient(
-                grad.cx() as _, grad.cy() as _, 1., // XXX:
-                grad.fx() as _, grad.fy() as _, grad.r().get() as _).unwrap();
+            let (dx, dy) = (grad.cx() - grad.fx(), grad.cy() - grad.fy());
+            let radius = (dx * dx + dy * dy).sqrt();
+            let radial = ctx2d.create_radial_gradient(
+                grad.fx() as _, grad.fy() as _, radius as _,    // XXX: 1.,
+                grad.cx() as _, grad.cy() as _, grad.r().get() as _).unwrap();
 
             grad.stops().iter().for_each(|stop| { let _ = radial.add_color_stop(0.0,
                 &to_css_color(stop.color(), stop.opacity() * opacity));
@@ -274,7 +276,7 @@ fn process_segcmd(path: &Path2d, cmd: &SegInstr, last_point: &mut Point) {
 
 fn wcns_arc_to(path: &Path2d, start: &Point, radius: &(f32, f32),
     rotation: f32, large: bool, sweep: bool, end: &Point) {
-    let svg_arc = kurbo::SvgArc {   // lyon_geom: https://github.com/nical/lyon
+    let svg_arc = kurbo::SvgArc {
            to: kurbo::Point::new(end.x as _, end.y as _),
          from: kurbo::Point::new(start.x as _, start.y as _),
         radii: kurbo::Vec2 ::new(radius.0 as _, radius.1 as _),
@@ -305,13 +307,11 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
         }   // don't need to scale, since created in context
         Style::RadialGradient { points, cindex } => {
             let (dx, dy) = (points.1.x - points.0.x, points.1.y - points.0.y);
-            let radius = if dx.abs() < f32::EPSILON { dy.abs() }
-                         else if dy.abs() < f32::EPSILON { dx.abs() }
-                         else { (dx * dx + dy * dy).sqrt() };
+            let radius = (dx * dx + dy * dy).sqrt();
 
             let radial = ctx2d.create_radial_gradient(
                 points.0.x as _, points.0.y as _, 1.,   // XXX:
-                points.1.x as _, points.1.y as _, radius as _).unwrap();
+                points.0.x as _, points.0.y as _, radius as _).unwrap();
             let _ = radial.add_color_stop(0.0, &to_css_color(img, cindex.0));
             let _ = radial.add_color_stop(1.0, &to_css_color(img, cindex.1));   radial.into()
         }

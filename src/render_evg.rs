@@ -176,13 +176,14 @@ fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>, style: &Style
             sten    //sten.set_matrix(trfm);
         }
         Style::RadialGradient { points, cindex } => {
+            let (dx, dy) = (points.1.x - points.0.x, points.1.y - points.0.y);
+            let radius = (dx * dx + dy * dy).sqrt();
+            let radius = GF_Point2D { x: radius.into(), y: radius.into() };
+
             let sten = Stencil::new(GF_STENCIL_RADIAL_GRADIENT);
-            let radius = GF_Point2D {
-                x: (points.1.x - points.0.x).abs().into(),
-                y: (points.1.y - points.0.y).abs().into() };
             sten.push_interpolation(0.into(), img.lookup_color(cindex.0).into());
             sten.push_interpolation(1.into(), img.lookup_color(cindex.1).into());
-            sten.set_radial(points.0.into(), points.1.into(), radius);
+            sten.set_radial(points.0.into(), points.0.into(), radius);
             sten    //sten.set_matrix(trfm);
         }
     }

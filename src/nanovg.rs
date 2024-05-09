@@ -422,9 +422,12 @@ fn convert_paint(paint: &usvg::Paint,
         usvg::Paint::LinearGradient(grad) =>
             Paint::linear_gradient_stops(grad.x1(), grad.y1(), grad.x2(), grad.y2(),
                 convert_stops(grad.stops(), opacity)),
-        usvg::Paint::RadialGradient(grad) =>
-            Paint::radial_gradient_stops(grad.cx(), grad.cy(), 1., grad.r().get(),
-                convert_stops(grad.stops(), opacity)),  // grad.fx(), grad.fy(),
+        usvg::Paint::RadialGradient(grad) => {
+            let (dx, dy) = (grad.cx() - grad.fx(), grad.cy() - grad.fy());
+            let radius = (dx * dx + dy * dy).sqrt();    // XXX: 1.
+            Paint::radial_gradient_stops(grad.fx(), grad.fy(), radius, grad.r().get(),
+                convert_stops(grad.stops(), opacity))
+        }
     }))
 }
 

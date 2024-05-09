@@ -190,11 +190,9 @@ fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
         }
         Style::RadialGradient { points, cindex } => {
             let (dx, dy) = (points.1.x - points.0.x, points.1.y - points.0.y);
-            let radius = if dx.abs() < f32::EPSILON { dy.abs() }
-                         else if dy.abs() < f32::EPSILON { dx.abs() }
-                         else { (dx * dx + dy * dy).sqrt() };
 
-            paint.shader = skia::RadialGradient::new(points.0.into(), points.1.into(), radius,
+            paint.shader = skia::RadialGradient::new(points.0.into(), points.0.into(),
+                    (dx * dx + dy * dy).sqrt(),
                 vec![ skia::GradientStop::new(0.0, img.lookup_color(cindex.0).into()),
                       skia::GradientStop::new(1.0, img.lookup_color(cindex.1).into()),
                 ],    skia::SpreadMode::Pad, trfm)
@@ -206,14 +204,15 @@ fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
 trait PathBuilderExt {
     fn arc_to(&mut self, radius: &(f32, f32), rotation: f32,
         large: bool, sweep: bool, target: &Point);
-}
+}   // https://github.com/RazrFalcon/resvg/blob/master/crates/usvg/src/parser/shapes.rs#L287
 
+//  SVG arc to Canvas arc: https://github.com/nical/lyon/blob/main/crates/geom/src/arc.rs
 impl PathBuilderExt for skia::PathBuilder {
     fn arc_to(&mut self, radius: &(f32, f32), rotation: f32,
         large: bool, sweep: bool, target: &Point) {
         let prev = self.last_point().unwrap();
 
-        let svg_arc = kurbo::SvgArc {   // lyon_geom: https://github.com/nical/lyon
+        let svg_arc = kurbo::SvgArc {
              from: kurbo::Point::new(prev.x as _, prev.y as _),
                to: kurbo::Point::new(target.x as _, target.y as _),
             radii: kurbo::Vec2 ::new(radius.0 as _, radius.1 as _),
