@@ -1,8 +1,8 @@
 /****************************************************************
- * $ID: nanovg.rs  	    Sat 04 Nov 2023 15:13:31+0800           *
+ * $ID: femtovg.rs      Sat 04 Nov 2023 15:13:31+0800           *
  *                                                              *
  * Maintainer: 范美辉 (MeiHui FAN) <mhfan@ustc.edu>              *
- * Copyright (c) 2023 M.H.Fan, All rights reserved.             *
+ * Copyright (c) 2024 M.H.Fan, All rights reserved.             *
  ****************************************************************/
 
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
@@ -52,7 +52,6 @@ dbg!();
 #[cfg(target_os = "macos")] fn get_renderer() -> Result<OpenGl, Box<dyn Error>> {
     //use glutin::{Context, ContextCurrentState, CreationError};
     use glutin::{context::GlProfile, ContextBuilder, GlRequest};
-    use winit::dpi::PhysicalSize;
 
     let ctx = ContextBuilder::new()
         .with_gl_profile(GlProfile::Core).with_gl(GlRequest::Latest)
@@ -98,7 +97,7 @@ fn get_renderer() -> Result<OpenGl, Box<dyn Error>> {
     Ok(unsafe { OpenGl::new_from_function_cstr(|s| display.get_proc_address(s) as *const _) }?)
 } */
 
-use winit::{window::Window, event_loop::EventLoop};
+use winit::{window::Window, event_loop::EventLoop, dpi::PhysicalSize};
 
 #[cfg_attr(coverage_nightly, coverage(off))] //#[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Box<dyn Error>> {
@@ -106,6 +105,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         env!("BUILD_GIT_HASH"), env!("BUILD_TIMESTAMP"), env!("CARGO_PKG_AUTHORS"));
         //build_time::build_time_local!("%H:%M:%S%:z %Y-%m-%d"), //option_env!("ENV_VAR_NAME");
     println!("Usage: {} [<path-to-svg>]", std::env::args().next().unwrap());
+
+    let mut fontdb = usvg::fontdb::Database::new(); fontdb.load_system_fonts();
+    let path = std::env::args().nth(1).unwrap_or("data/tiger.svg".to_owned());
+    let mut tree = usvg::Tree::from_data(&std::fs::read(path)?,
+        &usvg::Options::default(), &fontdb)?;
 
     let event_loop = EventLoop::new()?;
     let screen_size = event_loop.primary_monitor().unwrap().size();
@@ -124,7 +128,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .document().unwrap().get_element_by_id("canvas").unwrap()
             .dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
 
-        let window = WindowBuilder::new()
+        let window = winit::window::WindowBuilder::new()
             .with_canvas(Some(canvas)).build(&event_loop).unwrap();
         let canvas = Canvas::new(OpenGl::new_from_html_canvas(&canvas)
             .expect("Cannot create renderer")).expect("Cannot create canvas");
@@ -132,19 +136,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         (window, canvas)
     };
 
-    let (mut mousex, mut mousey) = (0., 0.);
-    let (mut dragging, mut focused) = (false, true);
+    let (mut dragging, mut focused, mut mouse) = (false, true, (0., 0.));
     let (mut perf, mut prevt) = (PerfGraph::new(), Instant::now());
-
-    let (mut coll, mut svg_size) =
-        convert_load_svg(std::env::args().nth(1).unwrap_or("data/tiger.svg".to_owned()));
 
     event_loop.run(|event, target| {
         let mut resize_canvas =
-            |size: winit::dpi::PhysicalSize<u32>, svg_size: usvg::Size| {
-            surface.resize(&glctx, size.width .try_into().unwrap(),
-                                   size.height.try_into().unwrap());
-            canvas.reset();     (mousex, mousey) = (0., 0.);
+            |size: PhysicalSize<u32>,  svg_size: usvg::Size| {
+            canvas.reset();     mouse = (0., 0.);
             let scale = (size.width  as f32 / svg_size.width())
                          .min(size.height as f32 / svg_size.height()) * 0.95;
             canvas.translate((size.width  as f32 - scale * svg_size.width())  / 2.,
@@ -158,7 +156,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 WindowEvent::CloseRequested | WindowEvent::Destroyed => target.exit(),
 
                 #[cfg(not(target_arch = "wasm32"))]     // first occur on window creation
-                WindowEvent::Resized(size) => resize_canvas(size, svg_size),
+                WindowEvent::Resized(size) => {
+                    surface.resize(&glctx,  size.width .try_into().unwrap(),
+                                            size.height.try_into().unwrap());
+                    resize_canvas(size, tree.size());
+                }
 
                 WindowEvent::MouseInput { button: MouseButton::Left,
                     state, .. } => match state {
@@ -170,7 +172,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 WindowEvent::MouseWheel { device_id: _, delta:
                     winit::event::MouseScrollDelta::LineDelta(_, y), .. } => {
                     let pt = canvas.transform().inversed()
-                        .transform_point(mousex, mousey);
+                        .transform_point(mouse.0, mouse.1);
                     canvas.translate( pt.0,  pt.1);
                     canvas.scale(1. + (y / 10.), 1. + (y / 10.));
                     canvas.translate(-pt.0, -pt.1);
@@ -180,18 +182,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                     position, .. } => {
                     if dragging {
                         let p0 = canvas.transform().inversed()
-                            .transform_point(mousex, mousey);
+                            .transform_point(mouse.0, mouse.1);
                         let p1 = canvas.transform().inversed()
                             .transform_point(position.x as _, position.y as _);
                         canvas.translate(p1.0 - p0.0, p1.1 - p0.1);
-                    }   (mousex, mousey) = (position.x as _, position.y as _);
+                    }   mouse = (position.x as _, position.y as _);
                 }
 
                 WindowEvent::DroppedFile(path) => {
-                    (coll, svg_size) = convert_load_svg(path);
+                    tree = usvg::Tree::from_data(&std::fs::read(path).unwrap(),
+                        &usvg::Options::default(), &fontdb).unwrap();
                     //let mut size =  window.inner_size();  size.width += 1; size.height += 1;
                     //let _ = window.request_inner_size(size);
-                    resize_canvas(window.inner_size(), svg_size);
+                    resize_canvas(window.inner_size(), tree.size());
                     window.request_redraw();
                 }
 
@@ -199,19 +202,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let now = Instant::now();
                     perf.update((now - prevt).as_secs_f32());   prevt = now;
 
-                    let (width, height) = (canvas.width(), canvas.height());
-                    canvas.clear_rect(0, 0, width, height, Color::rgbf(0.3, 0.3, 0.32));
-
-                    for (path, fill, line) in &coll {
-                        if let Some(fill) = fill { canvas.fill_path  (path, fill); }
-                        if let Some(line) = line { canvas.stroke_path(path, line); }
-
-                        if  canvas.contains_point(path, mousex, mousey,
-                            femtovg::FillRule::NonZero) {
-                            canvas.stroke_path(path,
-                                &Paint::color(Color::rgb(32, 240, 32)).with_line_width(1.));
-                        }
-                    }
+                    canvas.clear_rect(0, 0, canvas.width(),
+                                            canvas.height(), Color::rgbf(0.3, 0.3, 0.32));
+                    render_nodes(&mut canvas, &mouse, tree.root(), &usvg::Transform::default());
 
                     perf.render(&mut canvas, 3., 3.);
                     canvas.flush(); // Tell renderer to execute all drawing commands
@@ -239,13 +232,12 @@ fn create_window(event_loop: &EventLoop<()>, title: &str, width: u32, height: u3
         PossiblyCurrentContext, Canvas<OpenGl>), Box<dyn Error>> {
     use glutin::{config::ConfigTemplateBuilder, surface::SurfaceAttributesBuilder,
         context::{ContextApi, ContextAttributesBuilder}, display::GetGlDisplay};
-    use winit::{window::WindowBuilder, dpi::PhysicalSize};
     use raw_window_handle::HasRawWindowHandle;
     use glutin_winit::DisplayBuilder;
     use std::num::NonZeroU32;
 
     let (window, gl_config) = DisplayBuilder::new()
-        .with_window_builder(Some(WindowBuilder::new()
+        .with_window_builder(Some(winit::window::WindowBuilder::new()
             .with_inner_size(PhysicalSize::new(width, height))
             .with_resizable(true).with_title(title)))
         .build(event_loop, ConfigTemplateBuilder::new().with_alpha_size(8),
@@ -323,31 +315,39 @@ impl PerfGraph { #[allow(clippy::new_without_default)]
     }
 }
 
-fn convert_load_svg<P: AsRef<std::path::Path>>(path: P) ->
-    (Vec<(Path, PaintBoxO, PaintBoxO)>, usvg::Size) {
-    let prevt = Instant::now();
-
-    let mut fontdb = usvg::fontdb::Database::new(); fontdb.load_system_fonts();
-    let tree = usvg::Tree::from_data(&std::fs::read(path).unwrap(),
-        &usvg::Options::default(), &fontdb).unwrap();
-
-    let mut coll =
-        Vec::with_capacity(tree.root().children().len());
-    convert_nodes(&mut coll, tree.root(), &usvg::Transform::default());
-
-    println!("Load/Parse/Convert in {:.2}s, got {:3} paths as {:3}kB",
-        (Instant::now() - prevt).as_secs_f32(), coll.len(), coll.iter().fold(0,
-            |sum, elem| sum + elem.0.size() + std::mem::size_of_val(elem)) / 1000);
-            // XXX: seems no way to get size of stops in PaintFlavor
-    (coll, tree.size())
-}
-
-type PaintBoxO = Option<Box<Paint>>;
-fn convert_nodes(coll: &mut Vec<(Path, PaintBoxO, PaintBoxO)>,
+fn render_nodes(canvas: &mut Canvas<OpenGl>, mouse: &(f32, f32),
     parent: &usvg::Group, trfm: &usvg::Transform) {
+    fn convert_paint(paint: &usvg::Paint, opacity: usvg::Opacity,
+        _trfm: &usvg::Transform) -> Option<Paint> {
+        fn convert_stops(stops: &[usvg::Stop], opacity: usvg::Opacity) -> Vec<(f32, Color)> {
+            stops.iter().map(|stop| {   let color = stop.color();
+                let mut fc = Color::rgb(color.red, color.green, color.blue);
+                fc.set_alphaf((stop.opacity() * opacity).get());    (stop.offset().get(), fc)
+            }).collect::<Vec<_>>()
+        }
+
+        Some(match paint { usvg::Paint::Pattern(_) => { // trfm should be applied here
+                eprintln!("Not support pattern painting"); return None }
+            usvg::Paint::Color(color) => {
+                let mut fc = Color::rgb(color.red, color.green, color.blue);
+                fc.set_alphaf(opacity.get());   Paint::color(fc)
+            }
+
+            usvg::Paint::LinearGradient(grad) =>
+                Paint::linear_gradient_stops(grad.x1(), grad.y1(), grad.x2(), grad.y2(),
+                    convert_stops(grad.stops(), opacity)),
+            usvg::Paint::RadialGradient(grad) => {
+                let (dx, dy) = (grad.cx() - grad.fx(), grad.cy() - grad.fy());
+                let radius = (dx * dx + dy * dy).sqrt();    // XXX: 1.
+                Paint::radial_gradient_stops(grad.fx(), grad.fy(), radius, grad.r().get(),
+                    convert_stops(grad.stops(), opacity))
+            }
+        })
+    }
+
     for child in parent.children() { match child {
         usvg::Node::Group(group) =>     // trfm is needed on rendering only
-            convert_nodes(coll, group, &trfm.pre_concat(group.transform())),
+            render_nodes(canvas, mouse, group, &trfm.pre_concat(group.transform())),
 
         usvg::Node::Path(path) => {
             let tpath = if trfm.is_identity() { None
@@ -368,16 +368,18 @@ fn convert_nodes(coll: &mut Vec<(Path, PaintBoxO, PaintBoxO)>,
             }
 
             use femtovg::{FillRule, LineCap, LineJoin};
-            let fill = path.fill().and_then(|fill|
-                convert_paint(fill.paint(), fill.opacity(), trfm).map(|mut paint| {
+            if let Some(fill) = path.fill() {
+                if let Some(mut paint) = convert_paint(fill.paint(), fill.opacity(), trfm) {
                     paint.set_fill_rule(match fill.rule() {
                         usvg::FillRule::NonZero => FillRule::NonZero,
                         usvg::FillRule::EvenOdd => FillRule::EvenOdd,
-                    }); paint
-                }));
+                    }); canvas.fill_path(&fpath, &paint);
+                }
+            }
 
-            let stroke = path.stroke().and_then(|stroke|
-                convert_paint(stroke.paint(), stroke.opacity(), trfm).map(|mut paint| {
+            if let Some(stroke) = path.stroke() {
+                if let Some(mut paint) = convert_paint(stroke.paint(),
+                    stroke.opacity(), trfm) {
                     paint.set_miter_limit(stroke.miterlimit().get());
                     paint.set_line_width (stroke.width().get());
 
@@ -390,44 +392,20 @@ fn convert_nodes(coll: &mut Vec<(Path, PaintBoxO, PaintBoxO)>,
                         usvg::LineCap::Butt   => LineCap::Butt,
                         usvg::LineCap::Round  => LineCap::Round,
                         usvg::LineCap::Square => LineCap::Square,
-                    }); paint
-                }));
+                    }); canvas.stroke_path(&fpath, &paint);
+                }
+            }
 
-            coll.push((fpath, fill, stroke));
+            if  canvas.contains_point(&fpath, mouse.0, mouse.1, FillRule::NonZero) {
+                canvas.stroke_path(&fpath,
+                    &Paint::color(Color::rgb(32, 240, 32)).with_line_width(1.));
+            }
         }
 
         usvg::Node::Image(_) => eprintln!("Not support image node"),
         usvg::Node::Text(text) => { let group = text.flattened();
-            convert_nodes(coll, group, &trfm.pre_concat(group.transform()));
+            render_nodes(canvas, mouse, group, &trfm.pre_concat(group.transform()));
         }
     } }
-}
-
-fn convert_paint(paint: &usvg::Paint,
-    opacity: usvg::Opacity, _trfm: &usvg::Transform) -> PaintBoxO {
-    fn convert_stops(stops: &[usvg::Stop], opacity: usvg::Opacity) -> Vec<(f32, Color)> {
-        stops.iter().map(|stop| {   let color = stop.color();
-            let mut fc = Color::rgb(color.red, color.green, color.blue);
-            fc.set_alphaf((stop.opacity() * opacity).get());    (stop.offset().get(), fc)
-        }).collect::<Vec<_>>()
-    }
-
-    Some(Box::new(match paint { usvg::Paint::Pattern(_) => { // trfm should be applied here
-            eprintln!("Not support pattern painting"); return None }
-        usvg::Paint::Color(color) => {
-            let mut fc = Color::rgb(color.red, color.green, color.blue);
-            fc.set_alphaf(opacity.get());   Paint::color(fc)
-        }
-
-        usvg::Paint::LinearGradient(grad) =>
-            Paint::linear_gradient_stops(grad.x1(), grad.y1(), grad.x2(), grad.y2(),
-                convert_stops(grad.stops(), opacity)),
-        usvg::Paint::RadialGradient(grad) => {
-            let (dx, dy) = (grad.cx() - grad.fx(), grad.cy() - grad.fy());
-            let radius = (dx * dx + dy * dy).sqrt();    // XXX: 1.
-            Paint::radial_gradient_stops(grad.fx(), grad.fy(), radius, grad.r().get(),
-                convert_stops(grad.stops(), opacity))
-        }
-    }))
 }
 
