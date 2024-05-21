@@ -73,6 +73,7 @@ fn convert_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform)
             }
         }
 
+        // TODO: https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Using_images
         usvg::Node::Image(_) => eprintln!("Not support image node"),
         usvg::Node::Text(text) => { let group = text.flattened();
             convert_nodes(ctx2d, group, &trfm.pre_concat(group.transform()));
@@ -90,6 +91,8 @@ fn convert_paint(ctx2d: &Contex2d, paint: &usvg::Paint,
     }
 
     Some(match paint { usvg::Paint::Pattern(_) => { // trfm should be applied here
+            // TODO: https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas
+            // refer to render_pattern_pixmap@resvg/crates/resvg/src/path.rs
             eprintln!("Not support pattern painting"); return None }
         usvg::Paint::Color(color) => to_css_color(*color, opacity).into(),
 

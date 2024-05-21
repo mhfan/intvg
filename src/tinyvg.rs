@@ -133,7 +133,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
         tvgd.header.width  = (tvgd.read_range)(reader)? as _;
         tvgd.header.height = (tvgd.read_range)(reader)? as _;
-        let color_count = reader.read_var_uint()?;
+        let color_count = reader.read_varuint()?;
         tvgd.color_table.reserve_exact(color_count as _);
 
         tvgd.header.color_fmt = ColorEncoding::RGBA8888;
@@ -176,7 +176,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
             1 => Command::FillPolyg(self.read_fillcmd(skind, reader, Self::read_point)?),
             2 => Command::FillRects(self.read_fillcmd(skind, reader, Self::read_rect)?),
 
-            3 => {  let count = reader.read_var_uint()? + 1;
+            3 => {  let count = reader.read_varuint()? + 1;
                 let fill= self.read_style(skind, reader)?;
                 let coll = self.read_path(count as _, reader)?;
                 Command::FillPath(FillCMD { fill, coll })
@@ -185,7 +185,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
             5 => Command::DrawLoop (self.read_drawcmd(skind, reader, Self::read_point)?, false),
             6 => Command::DrawLoop (self.read_drawcmd(skind, reader, Self::read_point)?, true),
 
-            7 => {  let count = reader.read_var_uint()? + 1;
+            7 => {  let count = reader.read_varuint()? + 1;
                 let line= self.read_style(skind, reader)?;
                 let lwidth = self.read_unit(reader)?;
                 let coll = self.read_path(count as _, reader)?;
@@ -212,7 +212,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
     fn read_fillcmd<T>(&self, fill_kind: u8, reader: &mut R,
         read_fn: impl Fn(&Self, &mut R) -> Result<T>) -> Result<FillCMD<T>> {
-        let count = reader.read_var_uint()? + 1;
+        let count = reader.read_varuint()? + 1;
         let fill = self.read_style(fill_kind, reader)?;
         let mut coll = Vec::with_capacity(count as _);
         for _ in 0..count { coll.push(read_fn(self, reader)?); }
@@ -221,7 +221,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
     fn read_drawcmd<T>(&self, line_kind: u8, reader: &mut R,
         read_fn: impl Fn(&Self, &mut R) -> Result<T>) -> Result<DrawCMD<T>> {
-        let count = reader.read_var_uint()? + 1;
+        let count = reader.read_varuint()? + 1;
         let line = self.read_style(line_kind, reader)?;
         let lwidth = self.read_unit(reader)?;
         let mut coll = Vec::with_capacity(count as _);
@@ -242,7 +242,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
     fn read_path(&self, count: usize, reader: &mut R) -> Result<Vec<Segment>> {
         let mut vlen = Vec::with_capacity(count);
         let mut coll = Vec::with_capacity(count);
-        for _ in 0..count { vlen.push(reader.read_var_uint()? + 1); }
+        for _ in 0..count { vlen.push(reader.read_varuint()? + 1); }
         for len in vlen { coll.push(self.read_segment(len, reader)?); }
         Ok(coll)
     }
@@ -282,14 +282,14 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
     fn read_style(&self, kind: u8, reader: &mut R) -> Result<Style> {
         Ok(match kind {
-            0 =>   Style::FlatColor(reader.read_var_uint()?),
+            0 =>   Style::FlatColor(reader.read_varuint()?),
             1 => { Style::LinearGradient {
                     points: (self.read_point(reader)?, self.read_point(reader)?),
-                    cindex: (reader.read_var_uint()?, reader.read_var_uint()?),
+                    cindex: (reader.read_varuint()?, reader.read_varuint()?),
             } }
             2 => { Style::RadialGradient {
                     points: (self.read_point(reader)?, self.read_point(reader)?),
-                    cindex: (reader.read_var_uint()?, reader.read_var_uint()?),
+                    cindex: (reader.read_varuint()?, reader.read_varuint()?),
             } }
             x => return Err(TVGError { kind: ErrorKind::InvalidData(x),
                     msg: "unsupported primary style" })
@@ -330,7 +330,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
         (self.write_range)(writer, self.header.width  as _)?;
         (self.write_range)(writer, self.header.height as _)?;
-        writer.write_var_uint(self.color_table.len()  as _)?;
+        writer.write_varuint(self.color_table.len()   as _)?;
 
         match self.header.color_fmt {  //ColorEncoding::Custom => (),
             ColorEncoding::RGBA8888 => for color in &self.color_table {
@@ -364,7 +364,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
             Command::FillPath(cmd) => {
                 writer.write_u8((cmd.fill.to_u8() << 6) | 3)?;
-                writer.write_var_uint(cmd.coll.len() as u32 - 1)?;
+                writer.write_varuint(cmd.coll.len() as u32 - 1)?;
                 self.write_style(&cmd.fill, writer)?;
                 self.write_path (&cmd.coll, writer)
             }
@@ -377,7 +377,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
             Command::DrawPath(cmd) => {
                 writer.write_u8((cmd.line.to_u8() << 6) | 7)?;
-                writer.write_var_uint(cmd.coll.len() as u32 - 1)?;
+                writer.write_varuint(cmd.coll.len() as u32 - 1)?;
                 self.write_style(&cmd.line, writer)?;
                 self.write_unit(cmd.lwidth, writer)?;
                 self.write_path (&cmd.coll, writer)
@@ -402,7 +402,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
     fn write_fillcmd<T>(&self, idx: u8, cmd: &FillCMD<T>, writer: &mut W,
         write_fn: impl Fn(&Self, &T, &mut W) -> Result<()>) -> Result<()> {
         writer.write_u8((cmd.fill.to_u8() << 6) | idx)?;
-        writer.write_var_uint(cmd.coll.len() as u32 - 1)?;
+        writer.write_varuint(cmd.coll.len() as u32 - 1)?;
         self.write_style(&cmd.fill, writer)?;
         cmd.coll.iter().try_for_each(|elem| write_fn(self, elem, writer))
     }
@@ -410,7 +410,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
     fn write_drawcmd<T>(&self, idx: u8, cmd: &DrawCMD<T>, writer: &mut W,
         write_fn: impl Fn(&Self, &T, &mut W) -> Result<()>) -> Result<()> {
         writer.write_u8((cmd.line.to_u8() << 6) | idx)?;
-        writer.write_var_uint(cmd.coll.len() as u32 - 1)?;
+        writer.write_varuint(cmd.coll.len() as u32 - 1)?;
         self.write_style(&cmd.line, writer)?;   self.write_unit(cmd.lwidth, writer)?;
         cmd.coll.iter().try_for_each(|elem| write_fn(self, elem, writer))
     }
@@ -427,7 +427,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
     }
 
     fn write_path(&self, coll: &Vec<Segment>, writer: &mut W) -> Result<()> {
-        for seg in coll { writer.write_var_uint(seg.cmds.len() as u32 - 1)? }
+        for seg in coll { writer.write_varuint(seg.cmds.len() as u32 - 1)? }
         coll.iter().try_for_each(|seg| self.write_segment(seg, writer))
     }
 
@@ -478,14 +478,14 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
                cindex.1 >= self.color_table.len() as u32 { return Err(TVGError {
                 kind: ErrorKind::OutOfRange, msg: "invalid color index" }) }
             self.write_point(&points.0, writer)?;   self.write_point(&points.1, writer)?;
-            writer.write_var_uint(cindex.0)?;  Ok(writer.write_var_uint(cindex.1)?)
+            writer.write_varuint(cindex.0)?;  Ok(writer.write_varuint(cindex.1)?)
         };
 
         match style {
             Style::FlatColor(idx) => {
                 if *idx >= self.color_table.len() as u32 { return Err(TVGError {
                     kind: ErrorKind::OutOfRange, msg: "invalid color index" }) }
-                Ok(writer.write_var_uint(*idx)?)
+                Ok(writer.write_varuint(*idx)?)
             }
             Style::LinearGradient { points, cindex } =>
                 write_gradient(points, cindex),
@@ -586,9 +586,9 @@ trait TVGRead: io::Read  {
     #[inline] fn read_f32_le(&mut self) -> io::Result<f32> {    // read_f32::<LE>()
         let mut buf = [0; 4]; self.read_exact(&mut buf)?; Ok(f32::from_le_bytes(buf)) }
 
-    fn  read_var_uint(&mut self) -> Result<VarUInt> {
+    fn  read_varuint(&mut self) -> Result<VarUInt> {
         let mut val = 0u32;
-        for cnt in 0..5 {
+        for cnt in 0..5 { // (0..5).map(|x| x * 7)
             let tmp = self.read_u8()?;
             val |= ((tmp & 0x7F) as u32) << (7 * cnt);
             if tmp < 0x80 { return Ok(val); }
@@ -612,11 +612,9 @@ trait TVGWrite: io::Write {
     #[inline] fn write_f32_le(&mut self, n: f32) ->
         io::Result<()> { self.write_all(&n.to_le_bytes()) }
 
-    fn write_var_uint(&mut self, mut val: u32)-> io::Result<()> {
-        loop {  let (flag, tmp) = (val < 0x80, val as u8);
-            if flag { self.write_u8(tmp)?;  break
-            }  else { self.write_u8(tmp | 0x80)?; val >>= 7; }
-        }   Ok(())
+    fn write_varuint(&mut self, mut val: u32)-> io::Result<()> {
+        while 0x80 <= val { self.write_u8((val as u8) | 0x80)?; val >>= 7; }
+        self.write_u8(val as u8)?;  Ok(())
     }
 }
 

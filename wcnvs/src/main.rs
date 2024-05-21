@@ -23,7 +23,7 @@ fn app() -> Element {
 
             let now = Instant::now();
             wcnvs::render::render_svg(&tree, ctx2d, cw, ch);
-            draw_perf(ctx2d, 1. / (Instant::now() - now).as_secs_f32());
+            draw_perf(ctx2d, 1. / now.elapsed().as_secs_f32());
 
             return //intvg::convert::Convert::from_usvg(&data).unwrap()
         } else { TVGBuf::load_data(&mut std::io::Cursor::new(data)).unwrap() };
@@ -32,7 +32,7 @@ fn app() -> Element {
 
         let now = Instant::now();
         wcnvs::render::render_tvg(&tvg, ctx2d, cw, ch);
-        draw_perf(ctx2d, 1. / (Instant::now() - now).as_secs_f32());
+        draw_perf(ctx2d, 1. / now.elapsed().as_secs_f32());
     }
 
     fn draw_perf(ctx2d: &CanvasRenderingContext2d, fps: f32) {
