@@ -107,13 +107,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Usage: {} [<path-to-file>]", std::env::args().next().unwrap());
 
     let event_loop = EventLoop::new()?;
-    let screen_size = event_loop.primary_monitor().unwrap().size();
     use winit::event::{Event, WindowEvent, MouseButton, ElementState};
 
     #[cfg(not(target_arch = "wasm32"))]
     let (window, surface, glctx,
-        mut canvas) = create_window(&event_loop, "SVG Renderer - Femtovg",
-            screen_size.width / 2, screen_size.height / 2)?;
+        mut canvas) = create_window(&event_loop, "SVG Renderer - Femtovg")?;
 
     #[cfg(target_arch = "wasm32")] let (window, mut canvas) = {
         use winit::platform::web::WindowBuilderExtWebSys;
@@ -128,7 +126,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let canvas = Canvas::new(OpenGl::new_from_html_canvas(&canvas)
             .expect("Cannot create renderer")).expect("Cannot create canvas");
 
-        (window, canvas)
+        (window, canvas)    // need to resize canvas
     };
 
     /* let mut viewport = rive_rs::Viewport::default();
@@ -155,7 +153,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                          .min(size.height as f32 / orig.height()) * 0.95;
             canvas.translate((size.width  as f32 - scale * orig.width())  / 2.,
                              (size.height as f32 - scale * orig.height()) / 2.);
-            canvas.set_size  (size.width, size.height, window.scale_factor() as _);
+            canvas.set_size  (size.width, size.height, 1.); // window.scale_factor() as _
             canvas.scale(scale, scale);
         };
 
@@ -169,9 +167,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                                             size.height.try_into().unwrap());
                     if let Some(tree) = &tree { resize_canvas(size, tree.size()); }
 
-                    /* if scene.is_some() {
-                        viewport.resize(size.width, size.height);   //mouse = (0., 0.);
-                        canvas.set_size(size.width, size.height, window.scale_factor() as _);
+                    /* if scene.is_some() {    //mouse = (0., 0.);
+                        viewport.resize(size.width, size.height);
+                        canvas.set_size(size.width, size.height, 1.);
                     } */
                 }
 
@@ -270,19 +268,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 use glutin::{surface::{Surface, WindowSurface}, context::PossiblyCurrentContext, prelude::*};
 
 #[allow(clippy::type_complexity)] #[cfg(not(target_arch = "wasm32"))]
-fn create_window(event_loop: &EventLoop<()>, title: &str, width: u32, height: u32)
-    -> Result<(Window, Surface<WindowSurface>,
-        PossiblyCurrentContext, Canvas<OpenGl>), Box<dyn Error>> {
+fn create_window(event_loop: &EventLoop<()>, title: &str) -> Result<(Window,
+    Surface<WindowSurface>, PossiblyCurrentContext, Canvas<OpenGl>), Box<dyn Error>> {
     use glutin::{config::ConfigTemplateBuilder, surface::SurfaceAttributesBuilder,
         context::{ContextApi, ContextAttributesBuilder}, display::GetGlDisplay};
-    use raw_window_handle::HasRawWindowHandle;
-    use glutin_winit::DisplayBuilder;
-    use std::num::NonZeroU32;
+    use {raw_window_handle::HasRawWindowHandle, glutin_winit::DisplayBuilder};
+
+    let mut size = event_loop.primary_monitor().unwrap().size();
+    size.width  /= 2;   size.height /= 2;   use std::num::NonZeroU32;
 
     let (window, gl_config) = DisplayBuilder::new()
         .with_window_builder(Some(winit::window::WindowBuilder::new()
-            .with_inner_size(PhysicalSize::new(width, height))
-            .with_resizable(true).with_title(title)))
+            .with_inner_size(size).with_resizable(true).with_title(title)))
         .build(event_loop, ConfigTemplateBuilder::new().with_alpha_size(8),
             |configs|
                 // Find the config with the maximum number of samples,
@@ -293,8 +290,7 @@ fn create_window(event_loop: &EventLoop<()>, title: &str, width: u32, height: u3
                         config.num_samples() < accum.num_samples() { config } else { accum }
                 }).unwrap())?;
 
-    let window = window.unwrap();
-    let size = window.inner_size();
+    let window = window.unwrap(); //let size = window.inner_size();
     let raw_window_handle = window.raw_window_handle();
     let gl_display = gl_config.display();
 
