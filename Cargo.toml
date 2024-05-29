@@ -10,7 +10,7 @@ authors = [ "MeiHui FAN <mhfan@ustc.edu>" ]
 description = "lib/tool in Rust to load/save/render tvg file, parse from svg file by usvg"
 categories  = [ "parser-implementations", "rendering::data-formats", "rendering::engine",
      "graphics", "multimedia::images" ] # https://crates.io/category_slugs
-keywords = [ "TinyVG", "SVG", "tvg", "vector-graphic", "EVG", "Blend2D", "B2D" ]
+keywords = [ "TinyVG", "SVG", "vector-graphic", "EVG", "Blend2D" ]
 #exclude  = [ "examples" ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -56,7 +56,7 @@ evg = [ "dep:png" ]
 nvg = [ "femtovg", "winit", "glutin", "glutin-winit", "raw-window-handle" ]
 
 #cc = [ "dep:cc", "dep:bindgen", "dep:glob" ]   # implied by optional dependency
-#default = [ "evg", "b2d" ] # XXX: ftg/ovg/nvg/ugl not completely work yet
+#default = [ "b2d", "evg", "nvg" ] # XXX: ftg/ovg/ugl not completely work yet
 
 [[bin]]
 name = "nanovg"
@@ -76,6 +76,7 @@ cc = { version = "1.0", features = [ "parallel" ] }
 bindgen = "0.69"
 chrono = "0.4"
 glob = "0.3"
+#walkdir = "2.4"
 
 [profile.dev]
 opt-level = 1   # Enable a small amount of optimization in debug mode

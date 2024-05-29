@@ -206,6 +206,10 @@ trait PathBuilderExt {
         large: bool, sweep: bool, target: &Point);
 }   // https://github.com/RazrFalcon/resvg/blob/master/crates/usvg/src/parser/shapes.rs#L287
 
+//  https://medium.com/@Ovilia/if-you-wish-to-draw-an-arc-in-a-web-page-then-you-should-probably-use-canvas-or-svg-5a81194bbdf7
+//  https://stackoverflow.com/questions/6729056/mapping-svg-arcto-to-html-canvas-arcto
+//  https://spencermortensen.com/articles/bezier-circle/
+
 //  SVG arc to Canvas arc: https://github.com/nical/lyon/blob/main/crates/geom/src/arc.rs
 impl PathBuilderExt for skia::PathBuilder {
     fn arc_to(&mut self, radius: &(f32, f32), rotation: f32,
