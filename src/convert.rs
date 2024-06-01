@@ -30,7 +30,9 @@ impl<R: io::Read, W: io::Write> Convert for TinyVG<R, W> {
             (1 << range_bits) { scale_bits += 1; }  tvg.header.scale = scale_bits;
         // XXX: still need a traversely check CoordinateRange by a null writer?
 
-        convert_nodes(&mut tvg, tree.root(), &usvg::Transform::default());
+        let trfm = tree.view_box().to_transform(tree.size())
+            .pre_concat(tree.root().transform());
+        convert_nodes(&mut tvg, tree.root(), &trfm);
         println!("{:?}, {} colors, {} cmds/paths", &tvg.header,
             tvg.color_table.len(), tvg.commands.len());     Ok(tvg)
     }
@@ -43,8 +45,8 @@ fn convert_nodes<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
             convert_nodes(tvg, group, &trfm.pre_concat(group.transform())),
 
         usvg::Node::Path(path) => {     let mut lwidth = 0.0;
-            let coll = if trfm.is_identity() { convert_path(path.data())
-            } else { convert_path(&path.data().clone().transform(*trfm).unwrap()) };
+            if path.visibility() != usvg::Visibility::Visible { continue }
+            let coll = convert_path(path.data(), trfm);
 
             let fill = path  .fill().and_then(|fill|
                 convert_paint(tvg, fill.paint(), fill.opacity(), trfm));
@@ -52,6 +54,7 @@ fn convert_nodes<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
                 lwidth = line.width().get();    // XXX: need to apply transform?
                 convert_paint(tvg, line.paint(), line.opacity(), trfm) });
 
+            //match path.paint_order() {} // XXX:
             let cmd = match (fill, line) {
                 (Some(fill), None) => Command::FillPath(FillCMD { fill, coll }),
                 (None, Some(line)) => Command::DrawPath(DrawCMD { line, lwidth, coll }),
@@ -69,24 +72,34 @@ fn convert_nodes<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
     } }
 }
 
-fn convert_path(path: &skia::Path) -> Vec<Segment> {
+fn convert_path(path: &skia::Path, trfm: &usvg::Transform) -> Vec<Segment> {
     impl From<skia::Point> for Point {  //unsafe { std::mem::transmute(pt) }
         fn from(pt: skia::Point) -> Self { Self { x: pt.x, y: pt.y } }
     }
 
     let (mut coll, mut cmds) = (vec![], vec![]);
     let  mut start = Point { x: 0.0, y: 0.0 };
-    for seg in path.segments() {
+    let tpath = if trfm.is_identity() { None
+    } else { path.clone().transform(*trfm) };
+
+    for seg in tpath.as_ref().unwrap_or(path).segments() {
         let instr = match seg {
-            skia::PathSegment::MoveTo(pt) => {
+            skia::PathSegment::MoveTo(pt) => { //trfm.map_point(&mut pt);
                 if !cmds.is_empty() { coll.push(Segment { start, cmds }); cmds = vec![]; }
                 start = pt.into();  continue
             }
-            skia::PathSegment::LineTo(pt) => SegInstr::Line { end: pt.into() },
-            skia::PathSegment::QuadTo(ctrl, end) =>
-                SegInstr::QuadBezier { ctrl: ctrl.into(), end: end.into() },
-            skia::PathSegment::CubicTo(ctrl0, ctrl1, end) =>
-                SegInstr::CubicBezier { ctrl: (ctrl0.into(), ctrl1.into()), end: end.into() },
+            skia::PathSegment::LineTo(pt) => { //trfm.map_point(&mut pt);
+                SegInstr::Line { end: pt.into() }
+            }
+            skia::PathSegment::QuadTo(ctrl, end) => {
+                //trfm.map_point(&mut ctrl);  trfm.map_point(&mut end);
+                SegInstr::QuadBezier { ctrl: ctrl.into(), end: end.into() }
+            }
+            skia::PathSegment::CubicTo(ctrl0, ctrl1, end) => {
+                //trfm.map_point(&mut ctrl0);
+                //trfm.map_point(&mut ctrl1);   trfm.map_point(&mut end);
+                SegInstr::CubicBezier { ctrl: (ctrl0.into(), ctrl1.into()), end: end.into() }
+            }
 
             skia::PathSegment::Close => SegInstr::ClosePath,
         };  cmds.push(SegmentCommand { instr, lwidth: None });

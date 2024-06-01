@@ -17,7 +17,9 @@ pub fn render_svg(tree: &usvg::Tree, ctx2d: &Contex2d, cw: u32, ch: u32) {
     let _ = ctx2d.scale(scale, scale);  ctx2d.set_line_join("round");
     ctx2d.set_miter_limit(4.0);         ctx2d.set_line_cap ("round");
 
-    convert_nodes(ctx2d, tree.root(), &usvg::Transform::default());
+    let trfm = tree.view_box().to_transform(tree.size())
+        .pre_concat(tree.root().transform());
+    convert_nodes(ctx2d, tree.root(), &trfm);
 }
 
 fn convert_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) {
@@ -26,8 +28,9 @@ fn convert_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform)
             convert_nodes(ctx2d, group, &trfm.pre_concat(group.transform())),
 
         usvg::Node::Path(path) => {
+            if path.visibility() != usvg::Visibility::Visible { continue }
             let tpath = if trfm.is_identity() { None
-            } else { path.data().clone().transform(*trfm) };
+            } else { path.data().clone().transform(*trfm) };    // XXX:
             let fpath = Path2d::new().unwrap();
 
             for seg in tpath.as_ref().unwrap_or(path.data()).segments() {
@@ -44,17 +47,16 @@ fn convert_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform)
                 }
             }
 
-            if let Some(fill) = path.fill() {
+            let fill = path.fill().map(|fill| {
                 if let Some(style) = convert_paint(ctx2d, fill.paint(),
-                    fill.opacity(), trfm) { ctx2d.set_fill_style(&style); }
-
-                ctx2d.fill_with_path_2d_and_winding(&fpath, match fill.rule() {
+                      fill.opacity(), trfm) { ctx2d.set_fill_style(&style); }
+                match fill.rule() {
                     usvg::FillRule::NonZero => web_sys::CanvasWindingRule::Nonzero,
                     usvg::FillRule::EvenOdd => web_sys::CanvasWindingRule::Evenodd,
-                }); //ctx2d.fill_with_path_2d(&fpath);
-            }
+                }
+            });
 
-            if let Some(stroke) = path.stroke() {
+            let stroke = path.stroke().map(|stroke| {
                 if let Some(style) = convert_paint(ctx2d, stroke.paint(),
                     stroke.opacity(), trfm) { ctx2d.set_stroke_style(&style); }
 
@@ -69,7 +71,20 @@ fn convert_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform)
                     usvg::LineCap::Butt   => "butt",
                     usvg::LineCap::Round  => "round",
                     usvg::LineCap::Square => "square",
-                }); ctx2d.stroke_with_path(&fpath);
+                }); true
+            });
+
+            match path.paint_order() {
+                usvg::PaintOrder::FillAndStroke => {
+                    if let Some(fill) = fill {
+                        ctx2d.fill_with_path_2d_and_winding(&fpath, fill); }
+                    if stroke.is_some() { ctx2d.stroke_with_path(&fpath); }
+                }       //ctx2d.fill_with_path_2d(&fpath);
+                usvg::PaintOrder::StrokeAndFill => {
+                    if stroke.is_some() { ctx2d.stroke_with_path(&fpath); }
+                    if let Some(fill) = fill {
+                        ctx2d.fill_with_path_2d_and_winding(&fpath, fill); }
+                }
             }
         }
 
@@ -108,7 +123,7 @@ fn convert_paint(ctx2d: &Contex2d, paint: &usvg::Paint,
             let (dx, dy) = (grad.cx() - grad.fx(), grad.cy() - grad.fy());
             let radius = (dx * dx + dy * dy).sqrt();
             let radial = ctx2d.create_radial_gradient(
-                grad.fx() as _, grad.fy() as _, radius as _,    // XXX: 1.,
+                grad.fx() as _, grad.fy() as _, radius as _,    // XXX: 1./0.
                 grad.cx() as _, grad.cy() as _, grad.r().get() as _).unwrap();
 
             grad.stops().iter().for_each(|stop| { let _ = radial.add_color_stop(0.0,
@@ -313,7 +328,7 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             let radius = (dx * dx + dy * dy).sqrt();
 
             let radial = ctx2d.create_radial_gradient(
-                points.0.x as _, points.0.y as _, 1.,   // XXX:
+                points.0.x as _, points.0.y as _, 1.,   // XXX: 0.
                 points.0.x as _, points.0.y as _, radius as _).unwrap();
             let _ = radial.add_color_stop(0.0, &to_css_color(img, cindex.0));
             let _ = radial.add_color_stop(1.0, &to_css_color(img, cindex.1));   radial.into()

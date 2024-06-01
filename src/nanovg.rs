@@ -272,8 +272,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if let Some(tree) = &tree {
                         canvas.clear_rect(0, 0, canvas.width(), canvas.height(),
                             Color::rgbf(0.4, 0.4, 0.4));    // to clear viewport/viewbox only?
-                        render_nodes(&mut canvas, &mouse, tree.root(),
-                            &usvg::Transform::default());
+                        let trfm = tree.view_box().to_transform(tree.size())
+                            .pre_concat(tree.root().transform());
+                        render_nodes(&mut canvas, &mouse, tree.root(), &trfm);
                     }/* else {
                         canvas.clear_rect(0, 0, canvas.width(), canvas.height(),
                             Color::rgbf(0.4, 0.4, 0.4));
@@ -371,7 +372,7 @@ impl PerfGraph {
 
     pub fn render<T: Renderer>(&self, canvas: &mut Canvas<T>, x: f32, y: f32) {
         let (rw, rh, mut path) = (100., 20., Path::new());
-        let mut paint = Paint::color(Color::rgba(0, 0, 0, 128));
+        let mut paint = Paint::color(Color::rgba(0, 0, 0, 99));
         path.rect(0., 0., rw, rh);
 
         canvas.save();  canvas.reset_transform();   canvas.translate(x, y);
@@ -388,8 +389,8 @@ impl PerfGraph {
         paint.set_text_align(femtovg::Align::Right);
         paint.set_font_size(14.0); // some fixed values can be moved into the structure
 
-        let _ = canvas.fill_text(rw - 10., 0.,  // self.que.iter().sum::<f32>()
-            &format!("{:.2} FPS", self.sum / self.que.len() as f32), &paint);
+        let fps = self.sum / self.que.len() as f32; // self.que.iter().sum::<f32>()
+        let _ = canvas.fill_text(rw - 10., 0., &format!("{fps:.2} FPS"), &paint);
         canvas.restore();
     }
 }
@@ -407,6 +408,7 @@ fn render_nodes<T: Renderer>(canvas: &mut Canvas<T>, mouse: &(f32, f32),
 
         Some(match paint { usvg::Paint::Pattern(_) => { // trfm should be applied here
                 eprintln!("Not support pattern painting"); return None }
+            // https://github.com/RazrFalcon/resvg/blob/master/crates/resvg/src/path.rs#L179
             usvg::Paint::Color(color) => {
                 let mut fc = Color::rgb(color.red, color.green, color.blue);
                 fc.set_alphaf(opacity.get());   Paint::color(fc)
@@ -417,7 +419,7 @@ fn render_nodes<T: Renderer>(canvas: &mut Canvas<T>, mouse: &(f32, f32),
                     convert_stops(grad.stops(), opacity)),
             usvg::Paint::RadialGradient(grad) => {
                 let (dx, dy) = (grad.cx() - grad.fx(), grad.cy() - grad.fy());
-                let radius = (dx * dx + dy * dy).sqrt();    // XXX: 1.
+                let radius = (dx * dx + dy * dy).sqrt();    // XXX: 1./0.
                 Paint::radial_gradient_stops(grad.fx(), grad.fy(), radius, grad.r().get(),
                     convert_stops(grad.stops(), opacity))
             }
@@ -429,8 +431,9 @@ fn render_nodes<T: Renderer>(canvas: &mut Canvas<T>, mouse: &(f32, f32),
             render_nodes(canvas, mouse, group, &trfm.pre_concat(group.transform())),
 
         usvg::Node::Path(path) => {
+            if path.visibility() != usvg::Visibility::Visible { continue }
             let tpath = if trfm.is_identity() { None
-            } else { path.data().clone().transform(*trfm) };
+            } else { path.data().clone().transform(*trfm) };    // XXX:
             let mut fpath = Path::new();
 
             for seg in tpath.as_ref().unwrap_or(path.data()).segments() {
@@ -447,18 +450,17 @@ fn render_nodes<T: Renderer>(canvas: &mut Canvas<T>, mouse: &(f32, f32),
             }
 
             use femtovg::{FillRule, LineCap, LineJoin};
-            if let Some(fill) = path.fill() {
-                if let Some(mut paint) = convert_paint(fill.paint(), fill.opacity(), trfm) {
+            let fpaint = path.fill().and_then(|fill|
+                convert_paint(fill.paint(), fill.opacity(), trfm).map(|mut paint| {
                     paint.set_fill_rule(match fill.rule() {
                         usvg::FillRule::NonZero => FillRule::NonZero,
                         usvg::FillRule::EvenOdd => FillRule::EvenOdd,
-                    }); canvas.fill_path(&fpath, &paint);
-                }
-            }
+                    }); paint
+                })
+            );
 
-            if let Some(stroke) = path.stroke() {
-                if let Some(mut paint) = convert_paint(stroke.paint(),
-                    stroke.opacity(), trfm) {
+            let lpaint = path.stroke().and_then(|stroke|
+                convert_paint(stroke.paint(), stroke.opacity(), trfm).map(|mut paint| {
                     paint.set_miter_limit(stroke.miterlimit().get());
                     paint.set_line_width (stroke.width().get());
 
@@ -471,17 +473,29 @@ fn render_nodes<T: Renderer>(canvas: &mut Canvas<T>, mouse: &(f32, f32),
                         usvg::LineCap::Butt   => LineCap::Butt,
                         usvg::LineCap::Round  => LineCap::Round,
                         usvg::LineCap::Square => LineCap::Square,
-                    }); canvas.stroke_path(&fpath, &paint);
+                    }); paint
+                })
+            );
+
+            match path.paint_order() {
+                usvg::PaintOrder::FillAndStroke => {
+                    if let Some(paint) = fpaint { canvas.  fill_path(&fpath, &paint); }
+                    if let Some(paint) = lpaint { canvas.stroke_path(&fpath, &paint); }
+                }
+                usvg::PaintOrder::StrokeAndFill => {
+                    if let Some(paint) = lpaint { canvas.stroke_path(&fpath, &paint); }
+                    if let Some(paint) = fpaint { canvas.  fill_path(&fpath, &paint); }
                 }
             }
 
             if  canvas.contains_point(&fpath, mouse.0, mouse.1, FillRule::NonZero) {
-                canvas.stroke_path(&fpath,
-                    &Paint::color(Color::rgb(32, 240, 32)).with_line_width(1.));
+                canvas.stroke_path(&fpath, &Paint::color(Color::rgb(32, 240, 32))
+                    .with_line_width(1. / canvas.transform()[0]));
             }
         }
 
-        usvg::Node::Image(_) => eprintln!("Not support image node"),
+        usvg::Node::Image(_) => todo!(),
+        // https://github.com/linebender/vello_svg/blob/main/src/lib.rs#L212
         usvg::Node::Text(text) => { let group = text.flattened();
             render_nodes(canvas, mouse, group, &trfm.pre_concat(group.transform()));
         }
