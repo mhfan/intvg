@@ -166,15 +166,10 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             (color.g as u32)  << 8 |  color.b as u32
         } }
     }
-    impl From<RGBA8888> for BLRgba64 {
-        fn from(color: RGBA8888) -> Self { Self { value:
-            ((color.a as u64) << 48 | (color.r as u64) << 32 |
-             (color.g as u64) << 16 |  color.b as u64) * 0x0101
-        } }
-    }
 
     match style {
-        Style::FlatColor(idx) => Box::new(BLVar::initRgba32(img.lookup_color(*idx).into())),
+        Style::FlatColor(idx) =>
+            Box::new(BLSolidColor::initRgba32(img.lookup_color(*idx).into())),
 
         Style::LinearGradient { points, cindex } => {
             let mut linear = BLGradient::new(
@@ -187,7 +182,7 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             let (dx, dy) = (points.1.x - points.0.x, points.1.y - points.0.y);
 
             let mut radial = BLGradient::new(&BLRadialGradientValues::new(
-                &points.0.into(), &points.0.into(), (dx * dx + dy * dy).sqrt()));
+                &points.0.into(), &points.0.into(), (dx * dx + dy * dy).sqrt(), 1.));
             radial.addStop(0.0, img.lookup_color(cindex.0).into());
             radial.addStop(1.0, img.lookup_color(cindex.1).into());
             Box::new(radial)    //radial.scale(scale, scale);

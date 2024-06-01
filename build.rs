@@ -122,13 +122,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .opt_level(3).define("NDEBUG", None).compile(module);
     //println!("cargo:rustc-link-lib=rt");  // https://blend2d.com/doc/build-instructions.html
 
-    bgen.header(b2d_src.join("blend2d.h").to_string_lossy()).blocklist_item("*Virt")
+    bgen.header(b2d_src.join("blend2d.h").to_string_lossy())
         .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: true })
         .default_non_copy_union_style(bindgen::NonCopyUnionStyle::ManuallyDrop)
         .default_visibility(bindgen::FieldVisibilityKind::PublicCrate)
         .derive_copy(false).derive_debug(false).merge_extern_blocks(true)
         .allowlist_function("bl.*").allowlist_type("BL.*").layout_tests(false)
         //.clang_args(["-x", "c++", "-std=c++17", &format!("-I{b2d_src}")])
+        //.blocklist_item("*(Virt|Impl)") // XXX: can not be blocked
         //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()?.write_to_file(path.join(format!("{module}.rs")))?;
 
@@ -193,8 +194,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             is_x86_feature_detected!("avx512vl").then(||
                 cc.flag("-mavx512vl").define("BL_BUILD_OPT_AVX512", None));
 
-            is_x86_feature_detected!("avx2").then(||
-                cc.flag("-mavx2").define("BL_BUILD_OPT_AVX2", None));
+            is_x86_feature_detected!("avx2").then(|| {
+                cc.flag("-mavx2").define("BL_BUILD_OPT_AVX2", None);
+                cc.flag_if_supported("-mfma");
+            });
 
             is_x86_feature_detected!("avx").then(||
                 cc.flag("-mavx").define("BL_BUILD_OPT_AVX", None));
