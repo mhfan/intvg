@@ -136,8 +136,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "lottie")] let mut lottie = None;
     #[cfg(feature = "lottie")] use inlottie::schema::Animation;
 
-    let mut tree = None;
-    let mut fontdb = usvg::fontdb::Database::new(); fontdb.load_system_fonts();
+    let mut usvg_opts = usvg::Options::default();
+    usvg_opts.fontdb_mut().load_system_fonts();     let mut tree = None;
     let path = std::env::args().nth(1).unwrap_or("data/tiger.svg".to_owned());
 
     //if fs::metadata(&path).is_ok() {} //if std::path::Path(&path).exists() {}
@@ -146,8 +146,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "json" => lottie = Animation::from_reader(fs::File::open(&path)?).ok(),
         #[cfg(feature = "rive-rs")]
         "riv"  => scene = NanoVG::new_scene(&fs::read(&path)?),
-        "svg"  => tree  = usvg::Tree::from_data(&fs::read(&path)?,
-            &usvg::Options::default(), &fontdb).ok(),
+        "svg"  => tree  = usvg::Tree::from_data(&fs::read(&path)?, &usvg_opts).ok(),
         _ => {  let size = window.inner_size();
             canvas.set_size(size.width, size.height, 1.);
             eprintln!("File format is not supported: {path}");
@@ -237,7 +236,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let file = fs::read(&path).unwrap_or(vec![]);
                     match path.extension().and_then(|ext| ext.to_str()) {
                         Some("svg") => tree  = usvg::Tree::from_data(&file,
-                            &usvg::Options::default(), &fontdb).ok().map(|tree| {
+                            &usvg_opts).ok().map(|tree| {
                                 resize_canvas(window.inner_size(),
                                     tree.size().width(), tree.size().height()); tree }),
 
@@ -272,9 +271,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if let Some(tree) = &tree {
                         canvas.clear_rect(0, 0, canvas.width(), canvas.height(),
                             Color::rgbf(0.4, 0.4, 0.4));    // to clear viewport/viewbox only?
-                        let trfm = tree.view_box().to_transform(tree.size())
-                            .pre_concat(tree.root().transform());
-                        render_nodes(&mut canvas, &mouse, tree.root(), &trfm);
+                        render_nodes(&mut canvas, &mouse, tree.root(),
+                            &usvg::Transform::identity());
                     }/* else {
                         canvas.clear_rect(0, 0, canvas.width(), canvas.height(),
                             Color::rgbf(0.4, 0.4, 0.4));
@@ -430,8 +428,7 @@ fn render_nodes<T: Renderer>(canvas: &mut Canvas<T>, mouse: &(f32, f32),
         usvg::Node::Group(group) =>     // trfm is needed on rendering only
             render_nodes(canvas, mouse, group, &trfm.pre_concat(group.transform())),
 
-        usvg::Node::Path(path) => {
-            if path.visibility() != usvg::Visibility::Visible { continue }
+        usvg::Node::Path(path) => if path.is_visible() {
             let tpath = if trfm.is_identity() { None
             } else { path.data().clone().transform(*trfm) };    // XXX:
             let mut fpath = Path::new();

@@ -22,7 +22,7 @@ web-sys = { version = "0.3", features = [ 'Window', 'Document', 'HtmlCanvasEleme
 instant = { version = "0.1", features = [ "wasm-bindgen" ] }
 intvg = { path = "..", default-features = false } # git = "https://github.com/mhfan/intvg"
 kurbo = "0.11"   # Bezier curves utils
-usvg  = "0.41"
+usvg  = "0.42"
 
 [workspace]
 

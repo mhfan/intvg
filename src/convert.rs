@@ -9,9 +9,9 @@ pub trait Convert { fn from_usvg(svgd: &[u8]) ->
 
 impl<R: io::Read, W: io::Write> Convert for TinyVG<R, W> {
     fn from_usvg(svgd: &[u8]) -> Result<Self, Box<dyn Error>> {
-        let mut fontdb = usvg::fontdb::Database::new(); fontdb.load_system_fonts();
-        let tree = usvg::Tree::from_data(svgd, //&std::fs::read(&path)?,
-            &usvg::Options::default(), &fontdb)?;
+        let mut usvg_opts = usvg::Options::default();
+        usvg_opts.fontdb_mut().load_system_fonts();
+        let tree = usvg::Tree::from_data(svgd, &usvg_opts)?;    //&std::fs::read(&path)?,
 
         //Ok(Self::from_usvg(&tree)) }
         //fn from_usvg(tree: &usvg::Tree) -> Self {
@@ -30,9 +30,7 @@ impl<R: io::Read, W: io::Write> Convert for TinyVG<R, W> {
             (1 << range_bits) { scale_bits += 1; }  tvg.header.scale = scale_bits;
         // XXX: still need a traversely check CoordinateRange by a null writer?
 
-        let trfm = tree.view_box().to_transform(tree.size())
-            .pre_concat(tree.root().transform());
-        convert_nodes(&mut tvg, tree.root(), &trfm);
+        convert_nodes(&mut tvg, tree.root(), &usvg::Transform::identity());
         println!("{:?}, {} colors, {} cmds/paths", &tvg.header,
             tvg.color_table.len(), tvg.commands.len());     Ok(tvg)
     }
@@ -44,9 +42,8 @@ fn convert_nodes<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
         usvg::Node::Group(group) =>     // XXX: trfm is needed on rendering only
             convert_nodes(tvg, group, &trfm.pre_concat(group.transform())),
 
-        usvg::Node::Path(path) => {     let mut lwidth = 0.0;
-            if path.visibility() != usvg::Visibility::Visible { continue }
-            let coll = convert_path(path.data(), trfm);
+        usvg::Node::Path(path) => if path.is_visible() {
+            let (coll, mut lwidth) = (convert_path(path.data(), trfm), 0.0);
 
             let fill = path  .fill().and_then(|fill|
                 convert_paint(tvg, fill.paint(), fill.opacity(), trfm));

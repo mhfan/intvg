@@ -17,9 +17,9 @@ fn app() -> Element {
         use {intvg::tinyvg::TVGBuf, instant::Instant};
 
         let tvg = if file.ends_with(".svg") {
-            let mut fontdb = usvg::fontdb::Database::new(); fontdb.load_system_fonts();
-            let tree = usvg::Tree::from_data(data,
-                &usvg::Options::default(), &fontdb).unwrap();
+            let mut usvg_opts = usvg::Options::default();
+            usvg_opts.fontdb_mut().load_system_fonts();
+            let tree = usvg::Tree::from_data(data, &usvg_opts).unwrap();
 
             let now = Instant::now();
             wcnvs::render::render_svg(&tree, ctx2d, cw, ch);

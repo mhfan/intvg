@@ -17,9 +17,7 @@ pub fn render_svg(tree: &usvg::Tree, ctx2d: &Contex2d, cw: u32, ch: u32) {
     let _ = ctx2d.scale(scale, scale);  ctx2d.set_line_join("round");
     ctx2d.set_miter_limit(4.0);         ctx2d.set_line_cap ("round");
 
-    let trfm = tree.view_box().to_transform(tree.size())
-        .pre_concat(tree.root().transform());
-    convert_nodes(ctx2d, tree.root(), &trfm);
+    convert_nodes(ctx2d, tree.root(), &usvg::Transform::identity());
 }
 
 fn convert_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) {
@@ -27,8 +25,7 @@ fn convert_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform)
         usvg::Node::Group(group) =>     // trfm is needed on rendering only
             convert_nodes(ctx2d, group, &trfm.pre_concat(group.transform())),
 
-        usvg::Node::Path(path) => {
-            if path.visibility() != usvg::Visibility::Visible { continue }
+        usvg::Node::Path(path) => if path.is_visible() {
             let tpath = if trfm.is_identity() { None
             } else { path.data().clone().transform(*trfm) };    // XXX:
             let fpath = Path2d::new().unwrap();
