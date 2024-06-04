@@ -62,7 +62,14 @@ fn convert_nodes<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
             };  tvg.commands.push(cmd);
         }
 
-        usvg::Node::Image(_) => eprintln!("Not support image node"),
+        usvg::Node::Image(img) => if img.is_visible() {
+            match img.kind() {            usvg::ImageKind::JPEG(_) |
+                usvg::ImageKind::PNG(_) | usvg::ImageKind::GIF(_) =>
+                    eprintln!("TinyVG can't support raster images"),
+                usvg::ImageKind::SVG(svg) => convert_nodes(tvg, svg.root(), trfm),
+            }
+        }
+
         usvg::Node::Text(text) => { let group = text.flattened();
             convert_nodes(tvg, group, &trfm.pre_concat(group.transform()));
         }

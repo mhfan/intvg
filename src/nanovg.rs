@@ -491,8 +491,15 @@ fn render_nodes<T: Renderer>(canvas: &mut Canvas<T>, mouse: &(f32, f32),
             }
         }
 
-        usvg::Node::Image(_) => todo!(),
-        // https://github.com/linebender/vello_svg/blob/main/src/lib.rs#L212
+        usvg::Node::Image(img) => if img.is_visible() {
+            match img.kind() {            usvg::ImageKind::JPEG(_) |
+                usvg::ImageKind::PNG(_) | usvg::ImageKind::GIF(_) => todo!(),
+                // https://github.com/linebender/vello_svg/blob/main/src/lib.rs#L212
+                usvg::ImageKind::SVG(svg) =>
+                    render_nodes(canvas, mouse, svg.root(), trfm),
+            }
+        }
+
         usvg::Node::Text(text) => { let group = text.flattened();
             render_nodes(canvas, mouse, group, &trfm.pre_concat(group.transform()));
         }

@@ -17,13 +17,13 @@ pub fn render_svg(tree: &usvg::Tree, ctx2d: &Contex2d, cw: u32, ch: u32) {
     let _ = ctx2d.scale(scale, scale);  ctx2d.set_line_join("round");
     ctx2d.set_miter_limit(4.0);         ctx2d.set_line_cap ("round");
 
-    convert_nodes(ctx2d, tree.root(), &usvg::Transform::identity());
+    render_nodes(ctx2d, tree.root(), &usvg::Transform::identity());
 }
 
-fn convert_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) {
+fn render_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) {
     for child in parent.children() { match child {
         usvg::Node::Group(group) =>     // trfm is needed on rendering only
-            convert_nodes(ctx2d, group, &trfm.pre_concat(group.transform())),
+            render_nodes(ctx2d, group, &trfm.pre_concat(group.transform())),
 
         usvg::Node::Path(path) => if path.is_visible() {
             let tpath = if trfm.is_identity() { None
@@ -86,9 +86,16 @@ fn convert_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform)
         }
 
         // TODO: https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Using_images
-        usvg::Node::Image(_) => eprintln!("Not support image node"),
+        usvg::Node::Image(img) => if img.is_visible() {
+            match img.kind() {            usvg::ImageKind::JPEG(_) |
+                usvg::ImageKind::PNG(_) | usvg::ImageKind::GIF(_) => todo!(),
+                // https://github.com/linebender/vello_svg/blob/main/src/lib.rs#L212
+                usvg::ImageKind::SVG(svg) => render_nodes(ctx2d, svg.root(), trfm),
+            }
+        }
+
         usvg::Node::Text(text) => { let group = text.flattened();
-            convert_nodes(ctx2d, group, &trfm.pre_concat(group.transform()));
+            render_nodes(ctx2d, group, &trfm.pre_concat(group.transform()));
         }
     } }
 }
