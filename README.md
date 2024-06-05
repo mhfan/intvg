@@ -11,27 +11,49 @@ A library/tool to load/save binary .tvg file, rendering to .png file powered by 
 
 TinyVG textual representation (.tvgt) is only for debugging/development purposes which can be easily achieved with `#[derive(Debug)]` and `println!("{:?}, commands)` or `dbg!(commands)` in Rust.
 
-## Binding [GPAC/EVG](https://github.com/gpac/gpac/tree/master/src/evg) 2D rendering engine
-
-Build controlled by feature `"evg"`.
-
-Built-in seems the only one Rust binding for GPAC/EVG.
-
 ## Binding [Blend2D](https://github.com/blend2d/blend2d) rendering engine
 
 Build controlled by feature `"b2d"`.
 
+```bash
+    (cd 3rdparty && ./layout.sh)    # just run once
+
+    cargo r -F b2d -- <path-to-svg/tvg> [<path-to-tvg/png>]
+```
+
 A built-in Rust binding for Blend2D, simpler than outdated [blend2d-rs](https://github.com/Veykril/blend2d-rs).
+
+## Binding [GPAC/EVG](https://github.com/gpac/gpac/tree/master/src/evg) 2D rendering engine
+
+Build controlled by feature `"evg"`.
+
+```bash
+    (cd 3rdparty && ./layout.sh)    # just run once
+
+    cargo r -F evg -- <path-to-svg/tvg> [<path-to-tvg/png>]
+```
+
+Built-in seems the only one Rust binding in public for GPAC/EVG.
 
 ## A SVG Renderer/Viewer powered by [Femtovg](https://github.com/Femtovg/Femtovg)
 
 Build controlled by feature `"nvg"`.
 
-Refer to the SVG example in Femotovg, updated, rewritten and optimized the code.
+```bash
+    cargo r -F nvg --bin nanovg -- <path-to-svg>
+```
+
+Refer to the SVG example in Femotovg, updated, rewritten and optimized the code, added Drag & Drop support.
 
 ## Another SVG/TinyVG Viewer based on [HTML5/Web 2D Canvas API](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API)
 
-In the sub-crate `wcnvs`.
+Run the following command in the [wcnvs](wcnvs/README.md) sub-crate/project to start the Dioxus dev server:
+
+```bash
+dx serve --hot-reload
+```
+
+- Open the browser to <http://localhost:8080>
 
 ## Rendering performance comparison
 
@@ -46,5 +68,4 @@ In the sub-crate `wcnvs`.
 
 Test rendering [Ghostscript_Tiger.svg](https://commons.wikimedia.org/wiki/File:Ghostscript_Tiger.svg) on _MacBook Pro_ with _Apple M1 Pro_.
 
-* <https://www.nan.fyi/svg-paths>
-
+- <https://www.nan.fyi/svg-paths>
