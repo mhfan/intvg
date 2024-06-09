@@ -176,8 +176,7 @@ fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>, style: &Style
             sten    //sten.set_matrix(trfm);
         }
         Style::RadialGradient { points, cindex } => {
-            let (dx, dy) = (points.1.x - points.0.x, points.1.y - points.0.y);
-            let radius = (dx * dx + dy * dy).sqrt();
+            let radius = (points.1.x - points.0.x).hypot(points.1.y - points.0.y);
             let radius = GF_Point2D { x: radius.into(), y: radius.into() };
 
             let sten = Stencil::new(GF_STENCIL_RADIAL_GRADIENT);

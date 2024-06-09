@@ -189,10 +189,8 @@ fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
                 .ok_or("Fail to create linear gradient shader")?;  //paint.anti_alias = false;
         }
         Style::RadialGradient { points, cindex } => {
-            let (dx, dy) = (points.1.x - points.0.x, points.1.y - points.0.y);
-
             paint.shader = skia::RadialGradient::new(points.0.into(), points.0.into(),
-                    (dx * dx + dy * dy).sqrt(),
+                    (points.1.x - points.0.x) .hypot(points.1.y - points.0.y),
                 vec![ skia::GradientStop::new(0.0, img.lookup_color(cindex.0).into()),
                       skia::GradientStop::new(1.0, img.lookup_color(cindex.1).into()),
                 ],    skia::SpreadMode::Pad, trfm)

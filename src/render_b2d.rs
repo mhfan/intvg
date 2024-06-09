@@ -179,10 +179,9 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             Box::new(linear)    //linear.scale(scale, scale);
         }
         Style::RadialGradient { points, cindex } => {
-            let (dx, dy) = (points.1.x - points.0.x, points.1.y - points.0.y);
-
             let mut radial = BLGradient::new(&BLRadialGradientValues::new(
-                &points.0.into(), &points.0.into(), (dx * dx + dy * dy).sqrt(), 1.));
+                &points.0.into(), &points.0.into(),
+                (points.1.x - points.0.x).hypot(points.1.y - points.0.y), 1.));
             radial.addStop(0.0, img.lookup_color(cindex.0).into());
             radial.addStop(1.0, img.lookup_color(cindex.1).into());
             Box::new(radial)    //radial.scale(scale, scale);

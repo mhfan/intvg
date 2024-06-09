@@ -124,10 +124,9 @@ fn convert_paint(ctx2d: &Contex2d, paint: &usvg::Paint,
             }); linear.into()
         }
         usvg::Paint::RadialGradient(grad) => {
-            let (dx, dy) = (grad.cx() - grad.fx(), grad.cy() - grad.fy());
-            let radius = (dx * dx + dy * dy).sqrt();
             let radial = ctx2d.create_radial_gradient(
-                grad.fx() as _, grad.fy() as _, radius as _,    // XXX: 1./0.
+                grad.fx() as _, grad.fy() as _,     // XXX: 1./0.
+               (grad.cx() - grad.fx()).hypot(grad.cy() - grad.fy()) as _,
                 grad.cx() as _, grad.cy() as _, grad.r().get() as _).unwrap();
 
             grad.stops().iter().for_each(|stop| { let _ = radial.add_color_stop(0.0,
@@ -328,12 +327,9 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             let _ = linear.add_color_stop(1.0, &to_css_color(img, cindex.1));   linear.into()
         }   // don't need to scale, since created in context
         Style::RadialGradient { points, cindex } => {
-            let (dx, dy) = (points.1.x - points.0.x, points.1.y - points.0.y);
-            let radius = (dx * dx + dy * dy).sqrt();
-
-            let radial = ctx2d.create_radial_gradient(
-                points.0.x as _, points.0.y as _, 1.,   // XXX: 0.
-                points.0.x as _, points.0.y as _, radius as _).unwrap();
+            let radial = ctx2d.create_radial_gradient(  // XXX: 0.
+                points.0.x as _, points.0.y as _, 1., points.0.x as _, points.0.y as _,
+               (points.1.x - points.0.x).hypot(points.1.y - points.0.y) as _).unwrap();
             let _ = radial.add_color_stop(0.0, &to_css_color(img, cindex.0));
             let _ = radial.add_color_stop(1.0, &to_css_color(img, cindex.1));   radial.into()
         }
