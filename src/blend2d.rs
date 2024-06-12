@@ -121,28 +121,28 @@ impl BLContext { //  https://blend2d.com/doc/group__blend2d__api__rendering.html
 
     #[inline] pub fn fillUtf8TextDRgba32(&mut self, origin: &BLPoint,
         font: &BLFont, text: &str, color: BLRgba32) {
-        let c_str = CString::new(text).unwrap();
+        let cstr = CString::new(text).unwrap();
         safe_dbg!(blContextFillUtf8TextDRgba32(&mut self.0, origin, &font.0,
-            c_str.as_ptr(), text.len(), color.value));
+            cstr.as_ptr(), text.len(), color.value));
     }
     #[inline] pub fn fillUtf8TextDExt(&mut self, origin: &BLPoint,
         font: &BLFont, text: &str, style: &dyn B2DStyle) {
-        let c_str = CString::new(text).unwrap();
+        let cstr = CString::new(text).unwrap();
         safe_dbg!(blContextFillUtf8TextDExt(&mut self.0, origin, &font.0,
-            c_str.as_ptr(), text.len(), style as *const _ as _));
+            cstr.as_ptr(), text.len(), style as *const _ as _));
     }
 
     #[inline] pub fn strokeUtf8TextDRgba32(&mut self, origin: &BLPoint,
         font: &BLFont, text: &str, color: BLRgba32) {
-        let c_str = CString::new(text).unwrap();
+        let cstr = CString::new(text).unwrap();
         safe_dbg!(blContextStrokeUtf8TextDRgba32(&mut self.0, origin, &font.0,
-            c_str.as_ptr(), text.len(), color.value));
+            cstr.as_ptr(), text.len(), color.value));
     }
     #[inline] pub fn strokeUtf8TextDExt(&mut self, origin: &BLPoint,
         font: &BLFont, text: &str, style: &dyn B2DStyle) {
-        let c_str = CString::new(text).unwrap();
+        let cstr = CString::new(text).unwrap();
         safe_dbg!(blContextStrokeUtf8TextDExt(&mut self.0, origin, &font.0,
-            c_str.as_ptr(), text.len(), style as *const _ as _));
+            cstr.as_ptr(), text.len(), style as *const _ as _));
     }
 
     #[inline] pub fn blitImageD(&mut self, origin: &BLPoint, img: &BLImage, imgArea: &BLRectI) {
@@ -310,15 +310,17 @@ impl BLImage { //  https://blend2d.com/doc/group__blend2d__api__imaging.html
         safe_dbg!(blImageGetData(&self.0, &mut imgd));  imgd
     }
 
-    #[inline] pub fn readFromData(data: &[u8]) -> Self {
+    #[inline] pub fn readFromData(data: &[u8]) -> Result<Self, BLErr> {
         let mut img = object_init();    safe_dbg!(blImageInit(&mut img));
-        safe_dbg!(blImageReadFromData(&mut img, data.as_ptr() as _,
-            data.len(), null()));   Self(img)
+        let res = unsafe { blImageReadFromData(&mut img,
+            data.as_ptr() as _, data.len(), null()) };
+        if is_error(res) { Err(BLErr(res)) } else { Ok(Self(img)) }
     }
-    #[inline] pub fn from_file(file: &str) -> Self {
+    #[inline] pub fn from_file(file: &str) -> Result<Self, BLErr> {
         let mut img = object_init();    safe_dbg!(blImageInit(&mut img));
         let file = CString::new(file).unwrap();
-        safe_dbg!(blImageReadFromFile(&mut img, file.as_ptr(), null()));    Self(img)
+        let res = unsafe { blImageReadFromFile(&mut img, file.as_ptr(), null()) };
+        if is_error(res) { Err(BLErr(res)) } else { Ok(Self(img)) }
     }
 
     #[inline] pub fn scale(&mut self, src: &BLImage,
@@ -326,12 +328,13 @@ impl BLImage { //  https://blend2d.com/doc/group__blend2d__api__imaging.html
         safe_dbg!(blImageScale(&mut self.0, &src.0, &(dstW, dstH).into(), filter));
     }
 
-    #[inline] pub fn writeToFile<S: Into<Vec<u8>>>(&self, file: S) {
-        let file = CString::new(file).unwrap();
-        safe_dbg!(blImageWriteToFile(&self.0, file.as_ptr(), null()));
+    #[inline] pub fn writeToFile<S: Into<Vec<u8>>>(&self, file: S) -> Result<(), BLErr> {
+        let cstr = CString::new(file).unwrap();
+        let res = unsafe { blImageWriteToFile(&self.0, cstr.as_ptr(), null()) };
+        if is_error(res) { Err(BLErr(res)) } else { Ok(()) }
     }
-    #[inline] pub fn save_png<S: Into<Vec<u8>>>(&self, file: S) -> Result<(), &str> {
-        self.writeToFile(file);     Ok(())
+    #[inline] pub fn save_png<S: Into<Vec<u8>>>(&self, file: S) -> Result<(), BLErr> {
+        self.writeToFile(file)?;    Ok(())
     }
 }
 
@@ -369,24 +372,27 @@ impl Drop for BLFontFace {
 }
 
 impl BLFontFace {
-    #[inline] pub fn new(data: &[u8]) -> Self {
+    #[inline] pub fn new(data: &[u8]) -> Result<Self, BLErr> {
         let mut face  = object_init();  safe_dbg!(blFontFaceInit(&mut face));
 
         let mut fdata = object_init();  safe_dbg!(blFontDataInit(&mut fdata));
-        safe_dbg!(blFontDataCreateFromData(&mut fdata,
-            data.as_ptr() as _, data.len(), None, null_mut()));
-        //safe_dbg!(blFontDataCreateFromFile(&mut fdata,
-        //    CString::new(file).unwrap().as_ptr(), BLFileReadFlags::BL_FILE_READ_NO_FLAGS));
+        //let cstr = CString::new(file).unwrap();
+        //let res = unsafe { blFontDataCreateFromFile(&mut fdata,
+        //    cstr.as_ptr(), BLFileReadFlags::BL_FILE_READ_NO_FLAGS) };
+        let res = unsafe { blFontDataCreateFromData(&mut fdata,
+            data.as_ptr() as _, data.len(), None, null_mut()) };
+        if is_error(res) { return Err(BLErr(res)) }
 
         safe_dbg!(blFontFaceCreateFromData(&mut face, &fdata, 0));
-        safe_dbg!(blFontDataDestroy(&mut fdata));       Self(face)
+        safe_dbg!(blFontDataDestroy(&mut fdata));       Ok(Self(face))
     }
 
-    #[inline] pub fn from_file(file: &str) -> Self {
+    #[inline] pub fn from_file(file: &str) -> Result<Self, BLErr> {
         let mut face = object_init();   safe_dbg!(blFontFaceInit(&mut face));
-        let c_str = CString::new(file).unwrap();
-        safe_dbg!(blFontFaceCreateFromFile(&mut face, c_str.as_ptr(),
-            BLFileReadFlags::BL_FILE_READ_NO_FLAGS));   Self(face)
+        let cstr = CString::new(file).unwrap();
+        let res = unsafe { blFontFaceCreateFromFile(&mut face, cstr.as_ptr(),
+            BLFileReadFlags::BL_FILE_READ_NO_FLAGS) };
+        if is_error(res) { Err(BLErr(res)) } else { Ok(Self(face)) }
     }
 }
 
@@ -542,13 +548,11 @@ impl BLPath {
     #[inline] pub fn getSize(&self) -> u32 { unsafe { blPathGetSize(&self.0) as _ } }
     #[inline] pub fn getLastVertex(&self) -> Option<BLPoint> {
         let mut pt = BLPoint { x: 0.0, y: 0.0 };
-        if safe_dbg!(blPathGetLastVertex(&self.0, &mut pt)) ==
-            BLResultCode::BL_SUCCESS as u32 { Some(pt) } else { None }
+        if is_error(unsafe { blPathGetLastVertex(&self.0, &mut pt) }) { None } else { Some(pt) }
     }
-    #[inline] pub fn getBoundingBox(&self) -> Option<BLBox> {
-        let mut bbox = BLBox::new();
-        if safe_dbg!(blPathGetBoundingBox(&self.0, &mut bbox)) ==
-            BLResultCode::BL_SUCCESS as u32 { Some(bbox) } else { None }
+    #[inline] pub fn getBoundingBox(&self) -> Option<BLBox> {   let mut bbox = BLBox::new();
+        if is_error(unsafe { blPathGetBoundingBox(&self.0, &mut bbox) }) {
+            None } else { Some(bbox) }
     }
     #[inline] pub fn hitTest(&self, pt: &BLPoint, fillRule: BLFillRule) -> BLHitTest {
         unsafe { blPathHitTest(&self.0, pt, fillRule) }
@@ -811,6 +815,18 @@ impl BLPattern {
     }
 }
 
+#[derive(Debug)] pub struct BLErr(BLResult);
+impl core::fmt::Display for BLErr {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "BLResultCode: {}", self.0)   // XXX: display exact error message
+    }   // https://github.com/Veykril/blend2d-rs/blob/master/src/error.rs
+}
+impl std::error::Error  for BLErr {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> { None }
+}
+
+#[inline] fn is_error(res: BLResult) -> bool { res != BLResultCode::BL_SUCCESS as u32 }
+
 //}
 
 #[cfg(test)] mod tests { use super::*;
@@ -834,7 +850,7 @@ impl BLPattern {
         ctx.fillGeometryExt(&BLRoundRect::new(&(195, 195, 270, 270).into(), 25.0), &linear);
         //ctx.setCompOp(BLCompOp::BL_COMP_OP_SRC_OVER);   // restore to default
 
-        img.writeToFile("target/logo_b2d.png");
+        let _ = img.writeToFile("target/logo_b2d.png");
     }
 
     #[test] fn minimal_demo() {
@@ -859,7 +875,7 @@ impl BLPattern {
 
         ctx.fillGeometryRgba32(&path, 0xFFFFFFFF.into());
         ctx.strokeGeometryExt (&path, &linear);
-        img.writeToFile("target/demo_b2d.png");
+        let _ = img.writeToFile("target/demo_b2d.png");
         //BLContext::show_rtinfo();
     }
 }

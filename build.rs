@@ -111,9 +111,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     cc.cpp(true).flag("-std=c++17").define("ASMJIT_EMBED", None)
         .define("ASMJIT_NO_STDCXX", None).define("ASMJIT_NO_FOREIGN", None)
         .files(glob::glob(&format!("{}/**/*.cpp",
-            jit_src.display()))?.filter_map(Result::ok)).flag("-Wno-uninitialized")
-        .files(glob::glob(&format!("{}/**/*.cpp",
-            b2d_src.display()))?.filter_map(|f| f.ok().filter(|f|
+            jit_src.display()))?.filter_map(Result::ok))
+        .files(glob::glob(&format!("{}/**/*.cpp", b2d_src.display()))?
+            .filter_map(|f| f.ok().filter(|f|
                 f.as_os_str().to_str().is_some_and(|f| !f.contains("_test")))))
         .flag("-fvisibility=hidden").flag("-fno-exceptions").flag("-fno-math-errno")
         .flag("-fmerge-all-constants").flag("-ftree-vectorize").flag("-fno-rtti")
@@ -127,6 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .default_non_copy_union_style(bindgen::NonCopyUnionStyle::ManuallyDrop)
         .default_visibility(bindgen::FieldVisibilityKind::PublicCrate)
         .derive_copy(false).derive_debug(false).merge_extern_blocks(true)
+        //.derive_hash(false).derive_partialeq(false).derive_eq(false) // XXX: not work for enum?
         .allowlist_function("bl.*").allowlist_type("BL.*").layout_tests(false)
         //.clang_args(["-x", "c++", "-std=c++17", &format!("-I{b2d_src}")])
         //.blocklist_item("*(Virt|Impl)") // XXX: can not be blocked
