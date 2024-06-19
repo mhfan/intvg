@@ -9,21 +9,15 @@
 CUR=$(dirname $(readlink -f $0)) && cd $CUR && mkdir -p evg/gpac ftg/stroke
 echo "Layout 3rdparty libraries..."
 
+B2D_GIT=https://github.com/blend2d/blend2d.git
+B2D_GIT=https://github.com/mhfan/blend2d # patch to use single precision floating point instead
+[ -e asmjit  ] || git clone https://github.com/asmjit/asmjit.git
+[ -e blend2d ] || git clone $B2D_GIT
+
 GPAC=~/Devel/gpac
-FT2=~/Devel/freetype2
-FT2_GIT=https://git.savannah.gnu.org/git/freetype/freetype2.git
-FT2_GIT=https://github.com/mhfan/freetype2
 GPAC_GIT=https://github.com/gpac/gpac.git
 GPAC_GIT=https://github.com/mhfan/gpac # patch to fix for GPAC_FIXED_POINT
-
 [ -d $GPAC ] || { git clone $GPAC_GIT && GPAC=$CUR/gpac; }
-[ -d $FT2  ] || { git clone $FT2_GIT && FT2=$CUR/freetype2; }
-
-[ -e ftg/ftgrays.c ] || {
-ln -s $FT2/{include/freetype/ftimage.h,src/smooth/ftgrays.[ch],src/raster/ft{misc.h,raster.c}} ftg/;
-ln -s $FT2/src/{raster/ftmisc.h,base/ft{stroke,trigon}.c} ftg/stroke/;
-ln -s $FT2/include/freetype/ft{stroke,trigon,image}.h ftg/stroke/;
-}
 
 [ -e evg/ftgrays.c ] || {
 ln -s $GPAC/src/evg/{ftgrays.c,rast_soft.h,stencil.c,surface.c,raster_{argb,rgb,565,yuv}.c,raster3d.c} evg/;
@@ -32,11 +26,16 @@ ln -s $GPAC/include/gpac/{evg,setup,constants,maths,color,path2d,tools,thread}.h
 touch evg/gpac/{Remotery,config_file,configuration,main,module,version}.h;
 }
 
-B2D_GIT=https://github.com/blend2d/blend2d.git
-B2D_GIT=https://github.com/mhfan/blend2d # patch to use single precision floating point instead
+FT2=~/Devel/freetype2
+FT2_GIT=https://git.savannah.gnu.org/git/freetype/freetype2.git
+FT2_GIT=https://github.com/mhfan/freetype2
+[ -d $FT2  ] || { git clone $FT2_GIT && FT2=$CUR/freetype2; }
 
-[ -e blend2d ] || git clone $B2D_GIT
-[ -e asmjit  ] || git clone https://github.com/asmjit/asmjit.git
+[ -e ftg/ftgrays.c ] || {
+ln -s $FT2/{include/freetype/ftimage.h,src/smooth/ftgrays.[ch],src/raster/ft{misc.h,raster.c}} ftg/;
+ln -s $FT2/src/{raster/ftmisc.h,base/ft{stroke,trigon}.c} ftg/stroke/;
+ln -s $FT2/include/freetype/ft{stroke,trigon,image}.h ftg/stroke/;
+}
 
 [ -e micro-gl  ] || git clone https://github.com/micro-gl/micro-gl.git
 

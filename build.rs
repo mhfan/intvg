@@ -15,11 +15,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rustc-env=BUILD_GIT_HASH={}", String::from_utf8(output.stdout)?);
     println!("cargo:rerun-if-changed={}", Path::new(".git").join("index").display());
 
-    //std::process::Command::new(Path::new("3rdparty").join("layout.sh")).status()?;
+    std::process::Command::new(Path::new("3rdparty").join("layout.sh")).status()?;
     #[allow(unused)] let path = std::path::PathBuf::from(env::var("OUT_DIR")?);
-    #[cfg(feature = "ftg")] binding_ftg(&path)?;
-    #[cfg(feature = "evg")] binding_evg(&path)?;
     #[cfg(feature = "b2d")] binding_b2d(&path)?;
+    #[cfg(feature = "evg")] binding_evg(&path)?;
+
+    #[cfg(feature = "ftg")] binding_ftg(&path)?;
     #[cfg(feature = "ovg")] binding_ovg(&path)?;
     #[cfg(feature = "ugl")] binding_ugl(&path)?;
 
