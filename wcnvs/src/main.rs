@@ -101,7 +101,7 @@ fn app() -> Element {
                 let ctx2d: CanvasRenderingContext2d =
                     canvas.get_context("2d").unwrap().unwrap().dyn_into().unwrap();
 
-                // XXX: this is matter for retina rendering
+                // XXX: this is matter for hidpi/retina rendering
                 let scale = web_sys::window().unwrap().device_pixel_ratio();
                 canvas.set_width ((canvas.client_width()  as f64 * scale) as _);
                 canvas.set_height((canvas.client_height() as f64 * scale) as _);

@@ -102,7 +102,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     ctx.  fillGeometryExt(&path, paint.as_ref());
 
                     if res { for seg in coll {
-                        stroke_segment_path(seg, &mut ctx, pline.as_ref());
+                        stroke_segment_path(seg,  &mut ctx, pline.as_ref());
                     } } else { ctx.strokeGeometryExt(&path, pline.as_ref()); }  //path.reset();
                 }
             }   path.reset();

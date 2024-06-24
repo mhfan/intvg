@@ -6,10 +6,9 @@ edition = "2021"
 default-run = "intvg"
 license = "MIT OR Apache-2.0"
 authors = [ "MeiHui FAN <mhfan@ustc.edu>" ]
- repository = "https://github.com/mhfan/intvg"
+repository  = "https://github.com/mhfan/intvg"  # https://crates.io/category_slugs
+categories  = [ "parser-implementations", "rendering", "graphics", "multimedia::images" ]
 description = "lib/tool in Rust to load/save/render tvg file, parse from svg file by usvg"
-categories  = [ "parser-implementations", "rendering::data-formats", "rendering::engine",
-     "graphics", "multimedia::images" ] # https://crates.io/category_slugs
 keywords = [ "TinyVG", "SVG", "vector-graphic", "EVG", "Blend2D" ]
 #exclude  = [ "examples" ]
 

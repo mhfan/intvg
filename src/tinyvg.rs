@@ -42,6 +42,8 @@ impl From<TryFromIntError> for TVGError {
     fn from(e: TryFromIntError) -> Self { Self { kind: ErrorKind::IntError(e), msg: "" } }
 }
 
+//  https://rust-lang.github.io/api-guidelines/
+
 /// **TinyVG** files are made up of a header, followed by a color lookup table
 /// and a sequence of commands terminated by a _end of file_ command.
 ///

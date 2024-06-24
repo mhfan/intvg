@@ -24,6 +24,7 @@ fn render_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) 
     for child in parent.children() { match child {
         usvg::Node::Group(group) =>     // trfm is needed on rendering only
             render_nodes(ctx2d, group, &trfm.pre_concat(group.transform())),
+            // TODO: deal with group.clip_path()/mask()/filters()
 
         usvg::Node::Path(path) => if path.is_visible() {
             let tpath = if trfm.is_identity() { None

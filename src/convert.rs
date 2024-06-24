@@ -39,8 +39,12 @@ impl<R: io::Read, W: io::Write> Convert for TinyVG<R, W> {
 fn convert_nodes<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
     parent: &usvg::Group, trfm: &usvg::Transform) {
     for child in parent.children() { match child {
-        usvg::Node::Group(group) =>     // XXX: trfm is needed on rendering only
-            convert_nodes(tvg, group, &trfm.pre_concat(group.transform())),
+        usvg::Node::Group(group) => {   // XXX: trfm is needed on rendering only
+            if !group.filters().is_empty()  || group.mask().is_some() ||
+                group.clip_path().is_some() {
+                eprintln!("filters/mask/clip-path can't be supported in TinyVG!");
+            }   convert_nodes(tvg, group, &trfm.pre_concat(group.transform()));
+        }
 
         usvg::Node::Path(path) => if path.is_visible() {
             let (coll, mut lwidth) = (convert_path(path.data(), trfm), 0.0);

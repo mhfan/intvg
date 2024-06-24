@@ -69,3 +69,6 @@ dx serve --hot-reload
 Test rendering [Ghostscript_Tiger.svg](https://commons.wikimedia.org/wiki/File:Ghostscript_Tiger.svg) on _MacBook Pro_ with _Apple M1 Pro_.
 
 - <https://www.nan.fyi/svg-paths>
+- <https://www.w3.org/TR/SVG11/Overview.html>
+- <https://razrfalcon.github.io/notes-on-svg-parsing/>
+
