@@ -299,7 +299,8 @@ impl BLImage { //  https://blend2d.com/doc/group__blend2d__api__imaging.html
         safe_dbg!(blImageGetData(&self.0, &mut imgd));
 
         let mut conv = object_init();
-        safe_dbg!(blPixelConverterCreate(&mut conv, &di, &si, BLPixelConverterCreateFlags::BL_PIXEL_CONVERTER_CREATE_NO_FLAGS));
+        safe_dbg!(blPixelConverterCreate(&mut conv, &di, &si,
+            BLPixelConverterCreateFlags::BL_PIXEL_CONVERTER_CREATE_NO_FLAGS));
         safe_dbg!(blPixelConverterConvert(&conv, imgd.pixelData, imgd.stride, // dst
             imgd.pixelData, imgd.stride, imgd.size.w as _, imgd.size.h as _, null()));
         safe_dbg!(blPixelConverterDestroy(&mut conv));
@@ -485,7 +486,8 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
     #[inline] pub fn invert(&mut self, src: &Self) { safe_dbg!(blMatrix2DInvert(self, src)); }
 
     #[inline] pub fn getScaling(&self) -> (f32, f32) {
-        let mat = unsafe { ptr::read(&self.__bindgen_anon_1.__bindgen_anon_1) };
+        let mat = unsafe {
+            ptr::read(&self.__bindgen_anon_1.__bindgen_anon_1) };
         (mat.m00 as _, mat.m10 as _)
     }
 
@@ -615,7 +617,13 @@ impl BLRoundRect {
 
 impl BLBox   { #[inline] pub fn new() -> Self { Self { x0: 0., y0: 0., x1: 0., y1: 0. } } }
 impl BLRect  { #[inline] pub fn new() -> Self { Self { x : 0., y : 0., w: 0., h: 0. } } }
-impl BLPoint { #[inline] pub fn new() -> Self { Self { x : 0., y : 0. } } }
+impl BLPoint {
+    #[inline] pub fn new() -> Self { Self { x : 0., y : 0. } }
+    #[cfg(feature = "b2d_sfp")] #[inline] pub fn x(&self) -> f32 { self.x }
+    #[cfg(feature = "b2d_sfp")] #[inline] pub fn y(&self) -> f32 { self.y }
+    #[cfg(not(feature = "b2d_sfp"))] #[inline] pub fn x(&self) -> f64 { self.x }
+    #[cfg(not(feature = "b2d_sfp"))] #[inline] pub fn y(&self) -> f64 { self.y }
+}
 
 pub trait B2DGeometry { const GEOM_T: BLGeometryType; }
 impl B2DGeometry for BLPath {
@@ -658,6 +666,11 @@ impl From<(u32, u32)> for BLPoint {
 impl From<(i32, i32)> for BLPoint {
     #[inline] fn from(v: (i32, i32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
 }
+impl From<BLPoint> for (f32, f32) {
+    #[inline] fn from(val: BLPoint) -> Self { (val.x as _, val.y as _) }
+}
+impl Clone for BLPoint { #[inline] fn clone(&self) -> Self { *self } }
+impl Copy  for BLPoint {}
 
 impl From<(i32, i32)> for BLSizeI {
     #[inline] fn from(v: (i32, i32)) -> Self { Self { w: v.0, h: v.1 } }
@@ -700,35 +713,83 @@ impl From<(u32, u32, u32, u32)> for BLRect {
     }
 }
 
-impl From<BLRgba32> for BLRgba64 { #[inline] fn from(v: BLRgba32)  -> Self { v.value.into() } }
 impl From<u32> for BLRgba32 { #[inline] fn from(value: u32) -> Self { Self {   value } } }
 impl From<(u8, u8, u8, u8)> for BLRgba32 {  // (r, g, b, a) -> 0xAARRGGBB
     #[inline] fn from(val: (u8, u8, u8, u8)) -> Self { Self { value:
         ((val.3 as u32) << 24) | ((val.0 as u32) << 16) | ((val.1 as u32) << 8) | (val.2 as u32)
-} } }
-impl From<(u8, u8, u8, u8)> for BLRgba {
-    #[inline] fn from(val: (u8, u8, u8, u8)) -> Self {
-        Self { r: val.0 as f32 / 255., g: val.1 as f32 / 255.,
-               b: val.2 as f32 / 255., a: val.3 as f32 / 255. }
-    }
-}
-impl From<u32> for BLRgba64 {
-    #[inline] fn from(v: u32) -> Self { Self { value:
-        ((((v >> 24) as u64) << 48) | ((((v >> 16) & 0xFF) as u64) << 32) |
-        ((((v >>  8) & 0xFF) as u64) << 16) |  ((v & 0xFF) as u64)) * 0x0101
     } }
+}
+impl From<(f32, f32, f32, f32)> for BLRgba32 {
+    #[inline] fn from(val: (f32, f32, f32, f32)) -> Self {
+        const MAX: f32 = u8::MAX as _;
+        Self::new((val.0 * MAX + 0.5) as _, (val.1 * MAX + 0.5) as _,
+                  (val.2 * MAX + 0.5) as _, (val.3 * MAX + 0.5) as _)
+    }
 }
 impl BLRgba32 {
     #[inline] pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self { Self { value:
-        ((r as u32) << 16) | ((g as u32) << 8) | (b as u32) | ((a as u32) << 24)
-} } }
+        ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
+    } }
+    #[inline] pub fn a(&self) -> u8 { (self.value >> 24) as _ }
+    #[inline] pub fn r(&self) -> u8 { (self.value >> 16) as _ }
+    #[inline] pub fn g(&self) -> u8 { (self.value >>  8) as _ }
+    #[inline] pub fn b(&self) -> u8 {  self.value as _ }
+}
+
+impl From<BLRgba32> for BLRgba64 { #[inline] fn from(v: BLRgba32)  -> Self { v.value.into() } }
+impl From<u32> for BLRgba64 {
+    #[inline] fn from(v: u32) -> Self { Self { value:
+        ((((v >> 16) & 0xFF) as u64) << 40) | (((v >>  24) as u64) << 56) |
+        ((((v >>  8) & 0xFF) as u64) << 24) | (((v & 0xFF) as u64) <<  8)
+    } }
+}
+impl From<(f32, f32, f32, f32)> for BLRgba64 {
+    #[inline] fn from(val: (f32, f32, f32, f32)) -> Self {
+        const MAX: f32 = u16::MAX as _;
+        Self::new((val.0 * MAX + 0.5) as _, (val.1 * MAX + 0.5) as _,
+                  (val.2 * MAX + 0.5) as _, (val.3 * MAX + 0.5) as _)
+    }
+}
+impl BLRgba64 {
+    #[inline] pub fn new(r: u16, g: u16, b: u16, a: u16) -> Self { Self { value:
+        ((a as u64) << 48) | ((r as u64) << 32) | ((g as u64) << 16) | (b as u64)
+    } }
+    #[inline] pub fn a(&self) -> u16 { (self.value >> 48) as _ }
+    #[inline] pub fn r(&self) -> u16 { (self.value >> 32) as _ }
+    #[inline] pub fn g(&self) -> u16 { (self.value >> 16) as _ }
+    #[inline] pub fn b(&self) -> u16 {  self.value as _ }
+}
+
+impl From<(u8, u8, u8, u8)> for BLRgba {
+    #[inline] fn from(val: (u8, u8, u8, u8)) -> Self {
+        const MAX: f32 = u8::MAX as _;
+        Self { r: val.0 as f32 / MAX, g: val.1 as f32 / MAX,
+               b: val.2 as f32 / MAX, a: val.3 as f32 / MAX }
+    }
+}
+impl From<(f32, f32, f32, f32)> for BLRgba {
+    #[inline] fn from(val: (f32, f32, f32, f32)) -> Self {
+        Self { r: val.0, g: val.1, b: val.2, a: val.3 }
+    }
+}
 impl BLRgba {
     #[inline] pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         debug_assert!((0.0..=1.).contains(&r) && (0.0..=1.).contains(&g) &&
                       (0.0..=1.).contains(&b) && (0.0..=1.).contains(&a));
         Self { r, g, b, a }
     }
+    #[inline] pub fn a(&self) -> f32 { self.a }
+    #[inline] pub fn r(&self) -> f32 { self.r }
+    #[inline] pub fn g(&self) -> f32 { self.g }
+    #[inline] pub fn b(&self) -> f32 { self.b }
 }
+
+impl Clone for BLRgba64 { #[inline] fn clone(&self) -> Self { *self } }
+impl Clone for BLRgba32 { #[inline] fn clone(&self) -> Self { *self } }
+impl Clone for BLRgba   { #[inline] fn clone(&self) -> Self { *self } }
+impl Copy  for BLRgba64 {}
+impl Copy  for BLRgba32 {}
+impl Copy  for BLRgba   {}
 
 pub struct BLGradient(BLGradientCore);
 impl Drop for BLGradient {
