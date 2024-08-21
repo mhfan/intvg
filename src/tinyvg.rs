@@ -48,23 +48,21 @@ impl From<TryFromIntError> for TVGError {
 /// and a sequence of commands terminated by a _end of file_ command.
 ///
 /// - All integers are assumed to be encoded in little-endian byte order
-/// if not specified otherwise.
+///   if not specified otherwise.
 ///
-/// - The _Type_ fields have no padding bits in between. If a field
-/// does not align to a byte boundary, the next field will be offset
-/// into the byte by the current fields bit offset + bit size.
-/// This means, that two consecutive fields A (u3) and B (u5) can be
-/// extracted from the byte by using (byte & 0x7) >> 0 for A and
-/// (byte & 0xF8) >> 3 for B.
+/// - The _Type_ fields have no padding bits in between. If a field does not align to
+///   a byte boundary, the next field will be offset into the byte by the current
+///   fields bit offset + bit size. This means, that two consecutive fields A (u3) and
+///   B (u5) can be extracted from the byte by using (byte & 0x7) >> 0 for A and
+///   (byte & 0xF8) >> 3 for B.
 ///
 /// - If not specified otherwise, all coordinates in TinyVG are absolute
-/// coordinates, including path nodes and gradients.
+///   coordinates, including path nodes and gradients.
 ///
-/// - A lot of encoded integers are encoded off-by-one, thus mapping 0 to
-/// 1, 1 to 2 and so on. This is done as encoding these integers as 0
-/// would be equivalent to removing the element from the file.
-/// Thus, this can be used to encode some more elements with less bytes.
-/// If this is the case, this is signaled by the use of value+1.
+/// - A lot of encoded integers are encoded off-by-one, thus mapping 0 to 1, 1 to 2 and so on.
+///   This is done as encoding these integers as 0 would be equivalent to removing the element
+///   from the file. Thus, this can be used to encode some more elements with less bytes.
+///   If this is the case, this is signaled by the use of value+1.
 ///
 /// https://tinyvg.tech/download/specification.txt, https://github.com/TinyVG/sdk,
 /// https://github.com/lily-mara/tinyvg-rs, https://github.com/dataphract/tinyvg-rs

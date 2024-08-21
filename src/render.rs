@@ -228,6 +228,7 @@ impl PathBuilderExt for skia::PathBuilder {
     }
 }
 
+// https://github.com/TinyVG/sdk/blob/ed01b9112/src/lib/rendering.zig#L1133
 /* fn lerp_sRGB(c0: RGBA8888, c1: RGBA8888, f_unchecked: f32) -> RGBA8888 { // blend
     //  Color interpolation is needed in gradients and must performed in linear
     //  color space. This means that the value from the color table needs to be
@@ -235,9 +236,9 @@ impl PathBuilderExt for skia::PathBuilder {
     //  interpolated linearly and the final color is then determined by
     //  converting the color back to the specified color space.
     let f = f32::clamp(f_unchecked, 0.0, 1.0);  RGBA8888 {
-        r: gamma2linear(lerp(linear2gamma(c0.r), linear2gamma(c1.r), f)),
-        g: gamma2linear(lerp(linear2gamma(c0.g), linear2gamma(c1.g), f)),
-        b: gamma2linear(lerp(linear2gamma(c0.b), linear2gamma(c1.b), f)),
+        r: linear2gamma(lerp(gamma2linear(c0.r), gamma2linear(c1.r), f)),
+        g: linear2gamma(lerp(gamma2linear(c0.g), gamma2linear(c1.g), f)),
+        b: linear2gamma(lerp(gamma2linear(c0.b), gamma2linear(c1.b), f)),
         a: (lerp(c0.a as f32 / 255.0, c1.a as f32 / 255.0, f) * 255.0) as _,
     }
 }
@@ -250,7 +251,7 @@ fn lerp_value(src: f32, dst: f32, src_alpha: f32, dst_alpha: f32, fin_alpha: f32
 const sRGB_gamma: f32 = 2.2;
 #[inline] fn  mapToLinear(v: f32) -> f32 { f32::powf(v, sRGB_gamma) }
 #[inline] fn  mapToGamma (v: f32) -> f32 { f32::powf(v, 1.0 / sRGB_gamma) }
-#[inline] fn gamma2linear(v: f32) ->  u8 { (255.0 * mapToGamma(v)) as _ }
-#[inline] fn linear2gamma(v:  u8) -> f32 { mapToLinear(v as f32 / 255.0) }
+#[inline] fn linear2gamma(v: f32) ->  u8 { (255.0 * mapToGamma(v)) as _ }
+#[inline] fn gamma2linear(v:  u8) -> f32 { mapToLinear(v as f32 / 255.0) }
 #[inline] fn lerp(a: f32, b: f32, f: f32) -> f32 { a + (b - a) * f } */
 
