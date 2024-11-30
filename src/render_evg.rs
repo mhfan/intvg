@@ -11,7 +11,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
             (self.header.width  as f32 * scale).ceil() as _,
             (self.header.height as f32 * scale).ceil() as _);
 
-        impl From<&Rect> for GF_Rect {
+        #[allow(non_local_definitions)] impl From<&Rect> for GF_Rect {
             fn from(rect: &Rect) -> Self {  // XXX: screen to world coordinates
                 Self {  x: rect.x.into(), y: (rect.y + rect.h).into(),
                     width: rect.w.into(),      height: rect.h .into(), }
@@ -156,7 +156,7 @@ fn process_segcmd(path: &VGPath, cmd: &SegInstr) {
 }
 
 fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>, style: &Style) -> Stencil {
-    impl From<RGBA8888> for GF_Color {
+    #[allow(non_local_definitions)] impl From<RGBA8888> for GF_Color {
         fn from(color: RGBA8888) -> Self { // convert to 0xAARRGGBB
             (color.a as u32) << 24 | (color.r as u32) << 16 |
             (color.g as u32) <<  8 |  color.b as u32

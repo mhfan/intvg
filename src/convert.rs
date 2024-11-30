@@ -67,8 +67,9 @@ fn convert_nodes<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
         }
 
         usvg::Node::Image(img) => if img.is_visible() {
-            match img.kind() {            usvg::ImageKind::JPEG(_) |
-                usvg::ImageKind::PNG(_) | usvg::ImageKind::GIF(_) =>
+            match img.kind() {
+                usvg::ImageKind::GIF(_) | usvg::ImageKind::WEBP(_) |
+                usvg::ImageKind::PNG(_) | usvg::ImageKind::JPEG(_) =>
                     eprintln!("TinyVG can't support raster images"),
                 usvg::ImageKind::SVG(svg) => convert_nodes(tvg, svg.root(), trfm),
             }
@@ -81,8 +82,9 @@ fn convert_nodes<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
 }
 
 fn convert_path(path: &skia::Path, trfm: &usvg::Transform) -> Vec<Segment> {
-    impl From<skia::Point> for Point {  //unsafe { std::mem::transmute(pt) }
+    #[allow(non_local_definitions)] impl From<skia::Point> for Point {
         fn from(pt: skia::Point) -> Self { Self { x: pt.x, y: pt.y } }
+        //unsafe { std::mem::transmute(pt) }
     }
 
     let (mut coll, mut cmds) = (vec![], vec![]);
@@ -122,8 +124,9 @@ fn convert_paint<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
                    a: (stop.opacity() * opacity).to_u8() }
     };
 
-    impl From<(f32, f32)> for Point {   // unsafe { std::mem::transmute(pt) }
+    #[allow(non_local_definitions)] impl From<(f32, f32)> for Point {
         fn from(pt: (f32, f32)) -> Self { Self { x: pt.0, y: pt.1 } }
+        // unsafe { std::mem::transmute(pt) }
     }
 
     match paint { usvg::Paint::Pattern(_) => {  // trfm should be applied here

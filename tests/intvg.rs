@@ -33,8 +33,8 @@
         #[cfg(feature = "b2d")] intvg::render_b2d::Render::render(&tvg, 1.0)?;
         img.save_png(format!("target/{}.png", stem))?;
 
-        TVGImage::load_data(&mut BufReader::new(File::open(&tvgf)?)).map_err(
-            |err| { eprintln!("Fail to load `{}'", &tvgf);  err })?;
+        TVGImage::load_data(&mut BufReader::new(File::open(&tvgf)?)).inspect_err(
+            |_| eprintln!("Fail to load `{}'", &tvgf))?;
     }   Ok(())
 }
 

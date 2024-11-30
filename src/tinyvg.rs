@@ -66,7 +66,6 @@ impl From<TryFromIntError> for TVGError {
 ///
 /// https://tinyvg.tech/download/specification.txt, https://github.com/TinyVG/sdk,
 /// https://github.com/lily-mara/tinyvg-rs, https://github.com/dataphract/tinyvg-rs
-
 pub struct TinyVG<R: io::Read, W: io::Write> {
     pub header: Header,     // In-memory representation of a TinyVG file
     pub color_table:  Vec<RGBA8888>,    // colors used in this image

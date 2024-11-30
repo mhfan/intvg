@@ -17,7 +17,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
             (self.header.width  as f32 * scale).ceil() as _,
             (self.header.height as f32 * scale).ceil() as _, BLFormat::BL_FORMAT_PRGB32);
 
-        impl From<&Rect> for BLRect {   // BLBox
+        #[allow(non_local_definitions)] impl From<&Rect> for BLRect {   // BLBox
             //fn from(rect: &Rect) -> Self { unsafe { std::mem::transmute(rect) } }
             fn from(r: &Rect) -> Self {
                 //Self { x0: r.l as _, y0: r.t as _, x1: r.r as _, y1: r.b as _ }
@@ -160,7 +160,7 @@ fn process_segcmd(path: &mut BLPath, cmd: &SegInstr) {
 
 fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
     style: &Style) -> Box<dyn B2DStyle> {
-    impl From<RGBA8888> for BLRgba32 {
+    #[allow(non_local_definitions)] impl From<RGBA8888> for BLRgba32 {
         fn from(color: RGBA8888) -> Self { Self { value: // convert to 0xAARRGGBB
             (color.a as u32) << 24 | (color.r as u32) << 16 |
             (color.g as u32)  << 8 |  color.b as u32

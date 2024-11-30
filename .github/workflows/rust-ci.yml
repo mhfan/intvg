@@ -45,7 +45,6 @@ jobs:
 
     #- name: Install toolchain
     #  uses: dtolnay/rust-toolchain@stable
-    #- uses: Swatinem/rust-cache@v2
 
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -58,6 +57,7 @@ jobs:
           ~/.cargo/registry/index/
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
+          Cargo.lock
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
@@ -89,7 +89,7 @@ jobs:
       uses: actions/checkout@v4
 
     - run: rustup toolchain install nightly --profile minimal --component llvm-tools
-    - uses: Swatinem/rust-cache@v2 # should be after rustup
+    - uses: Swatinem/rust-cache@v2  # should be after rustup
 
     - uses: taiki-e/install-action@cargo-llvm-cov # https://github.com/taiki-e/cargo-llvm-cov
     - name: Generate code coverage  # https://github.com/actions-rs/tarpaulin

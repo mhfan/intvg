@@ -17,7 +17,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
             line_cap: skia::LineCap::Round, ..Default::default() };
         let err_msg = "Fail to build path";
 
-        impl From<Rect> for skia::Rect {
+        #[allow(non_local_definitions)] impl From<Rect> for skia::Rect {
             //fn from(r: Rect) -> Self { unsafe { std::mem::transmute(r) } }
             //fn from(r: Rect) -> Self { skia::Rect::from_ltrb(r.l, r.t, r.r, r.b).unwrap() }
             fn from(r: Rect) -> Self { skia::Rect::from_xywh(r.x, r.y, r.w, r.h).unwrap() }
@@ -164,6 +164,7 @@ fn process_segcmd(pb: &mut skia::PathBuilder, cmd: &SegInstr) {
     }
 }
 
+#[allow(non_local_definitions)]
 fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
     style: &Style, trfm: skia::Transform) ->
     Result<skia::Paint<'a>, &'static str> {
