@@ -8,9 +8,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dioxus = { version = "0.5", features = [ "web" ] } # "router", "desktop", "web"
-dioxus-logger = "0.5"
-tracing = "0.1"
+dioxus = { version = "0.5", features = [ "web" ] } # "web", "fullstack", "router"
+#dioxus-logger = "0.5"
+#tracing = "0.1"
 
 js-sys = "0.3"
 wasm-bindgen = "0.2"
@@ -22,7 +22,7 @@ web-sys = { version = "0.3", features = [ 'Window', 'Document', 'HtmlCanvasEleme
 instant = { version = "0.1", features = [ "wasm-bindgen" ] }
 intvg = { path = "..", default-features = false } # git = "https://github.com/mhfan/intvg"
 kurbo = "0.11"   # Bezier curves utils
-usvg  = "0.42"
+usvg  = "0.44"
 
-[workspace]
+#[workspace]
 

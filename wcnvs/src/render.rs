@@ -88,8 +88,9 @@ fn render_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) 
 
         // TODO: https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Using_images
         usvg::Node::Image(img) => if img.is_visible() {
-            match img.kind() {            usvg::ImageKind::JPEG(_) |
-                usvg::ImageKind::PNG(_) | usvg::ImageKind::GIF(_) => todo!(),
+            match img.kind() {
+                usvg::ImageKind::GIF(_) | usvg::ImageKind::WEBP(_) |
+                usvg::ImageKind::PNG(_) | usvg::ImageKind::JPEG(_) => todo!(),
                 // https://github.com/linebender/vello_svg/blob/main/src/lib.rs#L212
                 usvg::ImageKind::SVG(svg) => render_nodes(ctx2d, svg.root(), trfm),
             }

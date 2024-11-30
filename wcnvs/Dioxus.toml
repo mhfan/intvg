@@ -2,27 +2,29 @@
 # cargo install dioxus-cli # --git https://github.com/Dioxuslabs/cli
 
 [application]
-name = "wcnvs" # App (Project) Name
-asset_dir = "assets" # resource (public) file folder
-out_dir = "dist" # `build` & `serve` dist path
+name = "wcnvs"	# App (Project) Name
+out_dir = "dist"    # `build` & `serve` dist path
+asset_dir = "assets"	# resource (assets) file folder
 
-default_platform = "web" # Dioxus App Default Platform: desktop, web, mobile, ssr
+# Dioxus App Default Platform: web, desktop, fullstack, mobile, ssr
+default_platform = "web"
 
 [web.app]
-title = "dioxus | ⛺" # HTML title tag content
+title = "Dioxus | WebCanvas"	# HTML title tag content
+#base_path = "indiox" # "/"
 #index_on_404 = true
-#base_path = "indiox"
 
 [web.watcher]
-reload_html = true # when watcher trigger, regenerate the `index.html`
+reload_html = true  # when watcher trigger, regenerate the `index.html`
 watch_path = [ "src", "assets" ] # which files or dirs will be watcher monitoring
 
-[web.resource] # include `assets` in web platform
-#style = ["tailwind.css"] # CSS style file
-script = [] # Javascript code file
+[web.resource]	# include `assets` in web platform
+style = ["tailwind.css"]    # CSS style file
+script = []	# Javascript code file
 
 [web.resource.dev]
-script = [] # Javascript code file, serve: [dev-server] only
+script = []	# Javascript code file, serve: [dev-server] only
+#script = ["https://cdn.tailwindcss.com"]
 
 [application.tools]
 # use binaryen.wasm-opt for output Wasm file

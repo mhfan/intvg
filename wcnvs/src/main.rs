@@ -3,8 +3,8 @@
 use dioxus::{prelude::*, web::WebEventExt};
 
 fn main() {
-    dioxus_logger::init(tracing::Level::INFO).expect("failed to init logger");
-    tracing::info!("starting app of web canvas");
+    //dioxus_logger::init(tracing::Level::INFO).expect("failed to init logger");
+    //tracing::info!("starting app of web canvas");
     launch(app);
 }
 
