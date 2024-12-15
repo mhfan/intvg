@@ -47,7 +47,7 @@ fn render_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) 
 
             let fill = path.fill().map(|fill| {
                 if let Some(style) = convert_paint(ctx2d, fill.paint(),
-                      fill.opacity(), trfm) { ctx2d.set_fill_style(&style); }
+                      fill.opacity(), trfm) { ctx2d.set_fill_style_str(&style); }
                 match fill.rule() {
                     usvg::FillRule::NonZero => web_sys::CanvasWindingRule::Nonzero,
                     usvg::FillRule::EvenOdd => web_sys::CanvasWindingRule::Evenodd,
@@ -56,7 +56,7 @@ fn render_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) 
 
             let stroke = path.stroke().map(|stroke| {
                 if let Some(style) = convert_paint(ctx2d, stroke.paint(),
-                    stroke.opacity(), trfm) { ctx2d.set_stroke_style(&style); }
+                    stroke.opacity(), trfm) { ctx2d.set_stroke_style_str(&style); }
 
                 ctx2d.set_line_width (stroke.width().get() as _);
                 ctx2d.set_miter_limit(stroke.miterlimit().get() as _);
@@ -103,7 +103,7 @@ fn render_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) 
 }
 
 fn convert_paint(ctx2d: &Contex2d, paint: &usvg::Paint,
-    opacity: usvg::Opacity, _trfm: &usvg::Transform) -> Option<wasm_bindgen::JsValue> {
+    opacity: usvg::Opacity, _trfm: &usvg::Transform) -> Option<String> {
     fn to_css_color(color: usvg::Color, opacity: usvg::Opacity) -> String {
         let mut str = format!("#{:0<2x}{:0<2x}{:0<2x}",
             color.red, color.green, color.blue);
@@ -111,11 +111,11 @@ fn convert_paint(ctx2d: &Contex2d, paint: &usvg::Paint,
             (opacity.get() * 255.) as u8)); }   str
     }
 
-    Some(match paint { usvg::Paint::Pattern(_) => { // trfm should be applied here
+    match paint { usvg::Paint::Pattern(_) => { // trfm should be applied here
             // TODO: https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas
             // refer to render_pattern_pixmap@resvg/crates/resvg/src/path.rs
-            eprintln!("Not support pattern painting"); return None }
-        usvg::Paint::Color(color) => to_css_color(*color, opacity).into(),
+            eprintln!("Not support pattern painting"); None }
+        usvg::Paint::Color(color) => Some(to_css_color(*color, opacity)),
 
         usvg::Paint::LinearGradient(grad) => {
             let linear = ctx2d.create_linear_gradient(
@@ -123,7 +123,7 @@ fn convert_paint(ctx2d: &Contex2d, paint: &usvg::Paint,
 
             grad.stops().iter().for_each(|stop| { let _ = linear.add_color_stop(0.0,
                 &to_css_color(stop.color(), stop.opacity() * opacity));
-            }); linear.into()
+            }); linear.as_string()
         }
         usvg::Paint::RadialGradient(grad) => {
             let radial = ctx2d.create_radial_gradient(
@@ -133,9 +133,9 @@ fn convert_paint(ctx2d: &Contex2d, paint: &usvg::Paint,
 
             grad.stops().iter().for_each(|stop| { let _ = radial.add_color_stop(0.0,
                 &to_css_color(stop.color(), stop.opacity() * opacity));
-            }); radial.into()
+            }); radial.as_string()
         }
-    })
+    }
 }
 
 pub fn render_tvg<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
@@ -156,23 +156,23 @@ pub fn render_tvg<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
                 let mut iter = coll.iter();
                 if let Some(pt) = iter.next() { path.move_to(pt.x as _, pt.y as _) }
                 iter.for_each(|pt|   path.line_to(pt.x as _, pt.y as _));
-                ctx2d.set_fill_style(&convert_style(tvg, ctx2d, fill));     path.close_path();
+                ctx2d.set_fill_style_str(&convert_style(tvg, ctx2d, fill)); path.close_path();
                 ctx2d.fill_with_path_2d(&path);
             }
             Command::FillRects(FillCMD { fill, coll }) => {
-                ctx2d.set_fill_style(&convert_style(tvg, ctx2d, fill));
+                ctx2d.set_fill_style_str(&convert_style(tvg, ctx2d, fill));
                 coll.iter().for_each(|rect| {
                     path.rect(rect.x as _, rect.y as _, rect.w as _, rect.h as _);
                 }); ctx2d.fill_with_path_2d(&path);
             }
             Command::FillPath (FillCMD { fill, coll }) => {
-                ctx2d.set_fill_style(&convert_style(tvg, ctx2d, fill));
+                ctx2d.set_fill_style_str(&convert_style(tvg, ctx2d, fill));
                 for seg in coll {   let _ = segment_to_path(seg, &path);
                     //if res { return Err("Got line width in fill path segment") }
                 }   ctx2d.fill_with_path_2d(&path);
             }
             Command::DrawLines(DrawCMD { line, lwidth, coll }) => {
-                ctx2d.set_stroke_style(&convert_style(tvg, ctx2d, line));
+                ctx2d.set_stroke_style_str(&convert_style(tvg, ctx2d, line));
                 ctx2d.set_line_width(*lwidth as _);
                 coll.iter().for_each(|line| {
                     path.move_to(line.start.x as _, line.start.y as _);
@@ -185,13 +185,13 @@ pub fn render_tvg<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
                 iter.for_each(|pt| path.line_to(pt.x as _, pt.y as _));
 
                 ctx2d.set_line_width(*lwidth as _);     if !*strip { path.close_path(); }
-                ctx2d.set_stroke_style(&convert_style(tvg, ctx2d, line));
+                ctx2d.set_stroke_style_str(&convert_style(tvg, ctx2d, line));
                 ctx2d.stroke_with_path(&path);
             }
             Command::DrawPath (DrawCMD {
                 line, lwidth, coll }) => {
                 ctx2d.set_line_width(*lwidth as _);
-                ctx2d.set_stroke_style(&convert_style(tvg, ctx2d, line));
+                ctx2d.set_stroke_style_str(&convert_style(tvg, ctx2d, line));
                 for seg in coll { stroke_segment_path(seg, ctx2d); }
             }
             Command::OutlinePolyg(fill, DrawCMD {
@@ -201,14 +201,14 @@ pub fn render_tvg<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
                 iter.for_each(|pt| path.line_to(pt.x as _, pt.y as _));
 
                 ctx2d.set_line_width(*lwidth as _);     path.close_path();
-                ctx2d.set_fill_style  (&convert_style(tvg, ctx2d, fill));
-                ctx2d.set_stroke_style(&convert_style(tvg, ctx2d, line));
+                ctx2d.set_fill_style_str  (&convert_style(tvg, ctx2d, fill));
+                ctx2d.set_stroke_style_str(&convert_style(tvg, ctx2d, line));
                 ctx2d.fill_with_path_2d(&path);     ctx2d.stroke_with_path (&path);
             }
             Command::OutlineRects(fill, DrawCMD {
                 line, lwidth, coll }) => {
-                ctx2d.set_fill_style  (&convert_style(tvg, ctx2d, fill));
-                ctx2d.set_stroke_style(&convert_style(tvg, ctx2d, line));
+                ctx2d.set_fill_style_str  (&convert_style(tvg, ctx2d, fill));
+                ctx2d.set_stroke_style_str(&convert_style(tvg, ctx2d, line));
                 ctx2d.set_line_width(*lwidth as _);
 
                 coll.iter().for_each(|rect| {
@@ -218,8 +218,8 @@ pub fn render_tvg<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
             }
             Command::OutlinePath (fill, DrawCMD {
                 line, lwidth, coll }) => {
-                ctx2d.set_fill_style  (&convert_style(tvg, ctx2d, fill));
-                ctx2d.set_stroke_style(&convert_style(tvg, ctx2d, line));
+                ctx2d.set_fill_style_str  (&convert_style(tvg, ctx2d, fill));
+                ctx2d.set_stroke_style_str(&convert_style(tvg, ctx2d, line));
                 ctx2d.set_line_width(*lwidth as _);
 
                 for seg in coll {   let res = segment_to_path(seg, &path);
@@ -313,27 +313,29 @@ fn wcns_arc_to(path: &Path2d, start: &Point, radius: &(f32, f32),
 }
 
 fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
-    ctx2d: &Contex2d, style: &Style) -> wasm_bindgen::JsValue {
+    ctx2d: &Contex2d, style: &Style) -> String {
     fn to_css_color<R: io::Read, W: io::Write>(img: &TinyVG<R, W>, idx: u32) -> String {
         let color = img.lookup_color(idx);
         let mut str = format!("#{:0<2x}{:0<2x}{:0<2x}", color.r, color.g, color.b);
         if color.a != 255 {    str.push_str(&format!("{:0<2x}", color.a)); }    str
     }
 
-    match style {   Style::FlatColor(idx) => to_css_color(img, *idx).into(),
+    match style {   Style::FlatColor(idx) => to_css_color(img, *idx),
 
         Style::LinearGradient { points, cindex } => {
             let linear = ctx2d.create_linear_gradient(
                 points.0.x as _, points.0.y as _, points.1.x as _, points.1.y as _);
             let _ = linear.add_color_stop(0.0, &to_css_color(img, cindex.0));
-            let _ = linear.add_color_stop(1.0, &to_css_color(img, cindex.1));   linear.into()
+            let _ = linear.add_color_stop(1.0, &to_css_color(img, cindex.1));
+            linear.as_string().unwrap_or("".to_owned())
         }   // don't need to scale, since created in context
         Style::RadialGradient { points, cindex } => {
             let radial = ctx2d.create_radial_gradient(  // XXX: 0.
                 points.0.x as _, points.0.y as _, 1., points.0.x as _, points.0.y as _,
                (points.1.x - points.0.x).hypot(points.1.y - points.0.y) as _).unwrap();
             let _ = radial.add_color_stop(0.0, &to_css_color(img, cindex.0));
-            let _ = radial.add_color_stop(1.0, &to_css_color(img, cindex.1));   radial.into()
+            let _ = radial.add_color_stop(1.0, &to_css_color(img, cindex.1));
+            radial.as_string().unwrap_or("".to_owned())
         }
     }
 }

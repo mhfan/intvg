@@ -61,11 +61,14 @@ jobs:
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+    #- uses: taiki-e/install-action@nextest
+    - uses: cargo-bins/cargo-binstall@main
     - name: Run tests
-    #  uses: taiki-e/install-action@nextest
-      run: cargo t -F "evg,b2d,ftg,ovg,ugl" -- --nocapture #cargo nextest r
       env: # DYLD_FALLBACK_LIBRARY_PATH (macOS), PATH (Windows) # XXX:
         LD_LIBRARY_PATH: ${{github.workspace}}/3rdparty/amanithvg/lib/linux/x86_64/sre/standalone
+      run: |
+        cargo t -F "evg,b2d,ftg,ovg,ugl" -- --nocapture #cargo nextest r
+        cargo binstall dioxus-cli && cd wcnvs && dx build
 
     - name: Benchmark
       run: |

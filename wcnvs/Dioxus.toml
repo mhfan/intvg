@@ -1,13 +1,18 @@
 
-# cargo install dioxus-cli # --git https://github.com/Dioxuslabs/cli
+# cargo binstall dioxus-cli # dx new foo
 
 [application]
-name = "wcnvs"	# App (Project) Name
-out_dir = "dist"    # `build` & `serve` dist path
-asset_dir = "assets"	# resource (assets) file folder
+name = "wcnvs"     # App (Project) Name
 
-# Dioxus App Default Platform: web, desktop, fullstack, mobile, ssr
-default_platform = "web"
+# you can also use `dx serve/build --platform XXX` to use other platform
+default_platform = "web"    # value: web | desktop | mobile
+
+#asset_dir = "assets"       # resource (static) file folder
+#out_dir = "dist"    # Web `build` & `serve` dist path
+#hot_reload = true   # hot reload by default
+
+[web.wasm_opt]
+level = "4"     # The level wasm-opt should target. z is the smallest. 4 is the fastest.
 
 [web.app]
 title = "Dioxus | WebCanvas"	# HTML title tag content
@@ -16,22 +21,16 @@ title = "Dioxus | WebCanvas"	# HTML title tag content
 
 [web.watcher]
 reload_html = true  # when watcher trigger, regenerate the `index.html`
-watch_path = [ "src", "assets" ] # which files or dirs will be watcher monitoring
 
-[web.resource]	# include `assets` in web platform
-style = ["tailwind.css"]    # CSS style file
-script = []	# Javascript code file
+# which files or dirs will be watcher monitoring
+watch_path = [ "src", "assets", "index.html", "tailwind_base.css", "tailwind.config.js" ]
+
+#[web.resource]  # include `assets` in web platform
+#style = [ "assets/tailwind.css" ]  # Additional CSS style files
+#script = [] # Additional JavaScript files
 
 [web.resource.dev]
-script = []	# Javascript code file, serve: [dev-server] only
+script = [] # Javascript code file, serve: [dev-server] only
 #script = ["https://cdn.tailwindcss.com"]
 
-[application.tools]
-# use binaryen.wasm-opt for output Wasm file
-# binaryen just will trigger in `web` platform
-#binaryen = { wasm_opt = true }
-
-# default value: input = "public/tailwind.css", config = "src/tailwind.config.js"
-#tailwindcss = { input = "tailwind_base.css", config = "tailwind.config.js" }
-#tailwindcss = { input = "main.css", config = "tailwind.config.js" }
 
