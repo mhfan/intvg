@@ -491,11 +491,11 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
         (mat.m00 as _, mat.m10 as _)
     }
 
-    #[inline] pub fn mapPonitD(&self, pt: &BLPoint) -> BLPoint {
+    #[inline] pub fn mapPointD(&self, pt: &BLPoint) -> BLPoint {
         let mut npt = BLPoint::new();
         safe_dbg!(blMatrix2DMapPointDArray(self, &mut npt, pt, 1));     npt
     }
-    #[inline] pub fn mapPonitDArray(&self, pts: &mut [BLPoint]) {
+    #[inline] pub fn mapPointDArray(&self, pts: &mut [BLPoint]) {
         safe_dbg!(blMatrix2DMapPointDArray(self, pts.as_mut_ptr(), pts.as_ptr(), pts.len()));
     }
 }

@@ -681,7 +681,7 @@ pub struct Line { pub start: Point, pub end: Point, }
 ///
 /// The file header defines a _scale_ by which each signed integer is divided into
 /// the final value. For example, with a _reduced_ value of 0x13 and a scale of 4,
-/// we get the final value of 1.1875, as the number is interpretet as binary b0001.0011.
+/// we get the final value of 1.1875, as the number is interpreted as binary b0001.0011.
 #[derive(Clone, Copy)] pub struct Point { pub x: Unit, pub y: Unit }
 #[derive(Clone, Copy)] pub struct Rect  { pub x: Unit, pub y: Unit, pub w: Unit, pub h: Unit }
 

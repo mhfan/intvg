@@ -6,9 +6,9 @@
  ****************************************************************/
 
 use {std::io, intvg::tinyvg::*};
-use web_sys::{CanvasRenderingContext2d as Contex2d, Path2d};
+use web_sys::{CanvasRenderingContext2d as Context2d, Path2d};
 
-pub fn render_svg(tree: &usvg::Tree, ctx2d: &Contex2d, cw: u32, ch: u32) {
+pub fn render_svg(tree: &usvg::Tree, ctx2d: &Context2d, cw: u32, ch: u32) {
     let (tw, th) = (tree.size().width() as f64, tree.size().height() as f64);
     let scale = (cw as f64 / tw).min(ch as f64 / th);
 
@@ -20,7 +20,7 @@ pub fn render_svg(tree: &usvg::Tree, ctx2d: &Contex2d, cw: u32, ch: u32) {
     render_nodes(ctx2d, tree.root(), &usvg::Transform::identity());
 }
 
-fn render_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) {
+fn render_nodes(ctx2d: &Context2d, parent: &usvg::Group, trfm: &usvg::Transform) {
     for child in parent.children() { match child {
         usvg::Node::Group(group) =>     // trfm is needed on rendering only
             render_nodes(ctx2d, group, &trfm.pre_concat(group.transform())),
@@ -102,7 +102,7 @@ fn render_nodes(ctx2d: &Contex2d, parent: &usvg::Group, trfm: &usvg::Transform) 
     } }
 }
 
-fn convert_paint(ctx2d: &Contex2d, paint: &usvg::Paint,
+fn convert_paint(ctx2d: &Context2d, paint: &usvg::Paint,
     opacity: usvg::Opacity, _trfm: &usvg::Transform) -> Option<String> {
     fn to_css_color(color: usvg::Color, opacity: usvg::Opacity) -> String {
         let mut str = format!("#{:0<2x}{:0<2x}{:0<2x}",
@@ -139,7 +139,7 @@ fn convert_paint(ctx2d: &Contex2d, paint: &usvg::Paint,
 }
 
 pub fn render_tvg<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
-    ctx2d: &Contex2d, cw: u32, ch: u32) {
+    ctx2d: &Context2d, cw: u32, ch: u32) {
     let (tw, th) = (tvg.header.width as f64, tvg.header.height as f64);
     let scale = (cw as f64 / tw).min(ch as f64 / th);
 
@@ -234,7 +234,7 @@ pub fn render_tvg<R: io::Read, W: io::Write>(tvg: &TinyVG<R, W>,
     }
 }
 
-fn stroke_segment_path(seg: &Segment, ctx2d: &Contex2d) {
+fn stroke_segment_path(seg: &Segment, ctx2d: &Context2d) {
     let mut path = Path2d::new().unwrap();
     path.move_to(seg.start.x as _, seg.start.y as _);
 
@@ -313,7 +313,7 @@ fn wcns_arc_to(path: &Path2d, start: &Point, radius: &(f32, f32),
 }
 
 fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
-    ctx2d: &Contex2d, style: &Style) -> String {
+    ctx2d: &Context2d, style: &Style) -> String {
     fn to_css_color<R: io::Read, W: io::Write>(img: &TinyVG<R, W>, idx: u32) -> String {
         let color = img.lookup_color(idx);
         let mut str = format!("#{:0<2x}{:0<2x}{:0<2x}", color.r, color.g, color.b);
