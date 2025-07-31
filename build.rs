@@ -141,6 +141,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .then(|| cc.flag(simd_flag).define("BL_BUILD_OPT_ASIMD", None));
         }
 
+        if cfg!(target_arch = "aarch64") { let simd_flag = "-march=armv8-a+aes+crc";
+            cc.is_flag_supported(simd_flag).is_ok_and(|bl| bl)
+                .then(|| cc.flag(simd_flag).define("BL_TARGET_OPT_ASIMD_CRYPTO", None)
+                .define("BL_BUILD_OPT_ASIMD_CRYPTO", None));
+            cc  .define("BL_BUILD_OPT_ASIMD", None).define("BL_TARGET_OPT_ASIMD", None);
+        }
+
         let compiler = cc.get_compiler();
         if  compiler.is_like_gnu() { cc.flag_if_supported("-fno-semantic-interposition"); }
 
@@ -150,17 +157,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
               .flag("-Zc:strictStrings").flag("-Zc:threadSafeInit-").flag("-GS-").flag("-Oi");
 
             let simd_flag = "-arch:AVX512";
-            cc.is_flag_supported(simd_flag).unwrap_or(false)
-                .then(|| cc.flag(simd_flag).define("BL_BUILD_OPT_AVX512", None));
+            cc.is_flag_supported(simd_flag).unwrap_or(false).then(||
+                cc.flag(simd_flag).define("BL_BUILD_OPT_AVX512", None)
+                    .define("BLEND2D_TARGET_OPT_POPCNT", None)
+                    .define("BLEND2D_TARGET_OPT_BMI2", None));
 
             let simd_flag = "-arch:AVX2";
             if  cc.is_flag_supported(simd_flag).unwrap_or(false) {
-                cc.flag(simd_flag).define("BL_BUILD_OPT_AVX2", None);
+                cc.flag(simd_flag).define("BL_BUILD_OPT_AVX2", None)
+                    .define("BLEND2D_TARGET_OPT_POPCNT", None)
+                    .define("BLEND2D_TARGET_OPT_BMI2", None);
 
                 if compiler.is_like_clang() {
                     for simd_flag in ["-msse4.2", "-msse4.1", "-mssse3", "-msse3", "-msse2"] {
-                        cc.is_flag_supported(simd_flag).unwrap_or(false).then(||
-                            cc.flag(simd_flag).define("BL_BUILD_OPT_SSE2", None));  break;
+                        if  cc.is_flag_supported(simd_flag).is_ok_and(|v| v) {
+                            cc.flag(simd_flag).define("BL_BUILD_OPT_SSE2", None);
+                            if simd_flag == "-msse4.2" { cc.flag("-mpclmul"); }
+                        } else { break; }
                     }
                     cc.flag("-clang:-fno-rtti").flag("-clang:-fno-math-errno")
                       .flag("-clang:-fno-trapping-math");
@@ -171,41 +184,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 //env::var("TARGET").is_ok_and(|v| !v.contains("x86_64")).then(|| ...);
                 // 64-bit MSVC compiler doesn't like -arch:SSE[2] as it's implicit.
-                #[cfg(target_arch = "x86_64")] cc.flag("-arch:SSE2");
+                #[cfg(target_arch = "x86")] cc.flag("-arch:SSE2");
             }
 
             let simd_flag = "-arch:AVX";
             cc.is_flag_supported(simd_flag).unwrap_or(false)
                 .then(|| cc.flag(simd_flag).define("BL_BUILD_OPT_AVX", None));
         } else { // XXX: https://doc.rust-lang.org/std/arch/index.html
+            let mut avx512 = "";
+            is_x86_feature_detected!("avx512f") .then(|| avx512 = "avx512f");
+            is_x86_feature_detected!("avx512bw").then(|| avx512 = "avx512bw");
+            is_x86_feature_detected!("avx512dq").then(|| avx512 = "avx512dq");
+            is_x86_feature_detected!("avx512cd").then(|| avx512 = "avx512cd");
+            is_x86_feature_detected!("avx512vl").then(|| avx512 = "avx512vl");
+            if !avx512.is_empty() { cc.flag(format!("-m{avx512}"))
+                    .flag("-mbmi").flag("-mbmi2").flag("-mpopcnt")
+                    .define("BLEND2D_TARGET_OPT_POPCNT", None)
+                    .define("BLEND2D_TARGET_OPT_BMI2", None)
+                    .define("BL_BUILD_OPT_AVX512", None);
+            }
 
-            /* for simd_flag in ["-mavx512bw", "-mavx512dq", "-mavx512cd", "-mavx512vl"] {
-                cc.is_flag_supported(simd_flag).unwrap_or(false).then(||
-                    cc.flag(simd_flag).define("BL_BUILD_OPT_AVX512", None));    break;
-            } */
-
-            is_x86_feature_detected!("avx512bw").then(||
-                cc.flag("-mavx512bw").define("BL_BUILD_OPT_AVX512", None));
-
-            is_x86_feature_detected!("avx512dq").then(||
-                cc.flag("-mavx512dq").define("BL_BUILD_OPT_AVX512", None));
-
-            is_x86_feature_detected!("avx512cd").then(||
-                cc.flag("-mavx512cd").define("BL_BUILD_OPT_AVX512", None));
-
-            is_x86_feature_detected!("avx512vl").then(||
-                cc.flag("-mavx512vl").define("BL_BUILD_OPT_AVX512", None));
-
-            is_x86_feature_detected!("avx2").then(|| {
-                cc.flag("-mavx2").define("BL_BUILD_OPT_AVX2", None);
-                cc.flag_if_supported("-mfma");
-            });
+            //is_x86_feature_detected!("fma").then(|| cc.flag("-mfma"));
+            is_x86_feature_detected!("avx2").then(||
+                cc.flag("-mavx2").flag_if_supported("-mfma")
+                    .flag("-mbmi").flag("-mbmi2").flag("-mpopcnt")
+                    .define("BLEND2D_TARGET_OPT_POPCNT", None)
+                    .define("BLEND2D_TARGET_OPT_BMI2", None)
+                    .define("BL_BUILD_OPT_AVX2", None));
 
             is_x86_feature_detected!("avx").then(||
                 cc.flag("-mavx").define("BL_BUILD_OPT_AVX", None));
 
             is_x86_feature_detected!("sse4.2").then(||
-                cc.flag("-msse4.2").define("BL_BUILD_OPT_SSE4_2", None));
+                cc.flag("-msse4.2").flag("-mpclmul").define("BL_BUILD_OPT_SSE4_2", None));
 
             is_x86_feature_detected!("sse4.1").then(||
                 cc.flag("-msse4.1").define("BL_BUILD_OPT_SSE4_1", None));
@@ -216,13 +227,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             is_x86_feature_detected!("sse3").then(||
                 cc.flag("-msse3").define("BL_BUILD_OPT_SSE3", None));
 
-            is_x86_feature_detected!("sse2").then(||
-                cc.flag("-msse2").define("BL_BUILD_OPT_SSE2", None));
-
-            /* for simd_flag in ["-msse4.2", "-msse4.1", "-mssse3", "-msse3", "-msse2"] {
-                cc.is_flag_supported(simd_flag).unwrap_or(false).then(||
-                    cc.flag(simd_flag).define("BL_BUILD_OPT_SSE2", None));  break;
-            } */
+            #[cfg(target_arch = "x86")] is_x86_feature_detected!("sse2").then(|| {
+                cc.flag("-msse2").define("BL_BUILD_OPT_SSE2", None);
+                if  cc.get_compiler().is_like_gnu() { cc.flag("-mfpmath=sse"); }
+            });
         }
     }
 
