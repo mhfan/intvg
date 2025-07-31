@@ -39,7 +39,7 @@ impl From<bool> for Bool {
 }
 
 impl From<(Fixed, Fixed)> for GF_Point2D {
-    fn from(v: (Fixed, Fixed)) -> Self { Self { x: v.0, y: v.1 } }
+    fn from((x, y): (Fixed, Fixed)) -> Self { Self { x, y } }
 }
 
 impl Copy  for Fixed {}

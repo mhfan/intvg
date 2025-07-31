@@ -655,7 +655,7 @@ impl B2DGeometry for BLRoundRect {
 }
 
 impl From<(f64, f64)> for BLPoint {
-    #[inline] fn from(v: (f64, f64)) -> Self { Self { x: v.0, y: v.1 } }
+    #[inline] fn from((x, y): (f64, f64)) -> Self { Self { x, y } }
 }
 impl From<(f32, f32)> for BLPoint {
     #[inline] fn from(v: (f32, f32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
@@ -673,7 +673,7 @@ impl Clone for BLPoint { #[inline] fn clone(&self) -> Self { *self } }
 impl Copy  for BLPoint {}
 
 impl From<(i32, i32)> for BLSizeI {
-    #[inline] fn from(v: (i32, i32)) -> Self { Self { w: v.0, h: v.1 } }
+    #[inline] fn from((w, h): (i32, i32)) -> Self { Self { w, h } }
 }
 impl From<(u32, u32)> for BLSizeI {
     #[inline] fn from(v: (u32, u32)) -> Self { Self { w: v.0 as _, h: v.1 as _ } }
@@ -683,7 +683,7 @@ impl From<(f32, f32)> for BLSize  {
 }
 impl From<(f64, f64, f64, f64)> for BLBox {
     #[inline] fn from(v: (f64, f64, f64, f64)) -> Self {
-        Self { x0: v.0 as _, y0: v.1 as _, x1: v.2 as _, y1: v.3 as _ }
+        Self { x0: v.0, y0: v.1, x1: v.2, y1: v.3 }
     }
 }
 impl From<(f32, f32, f32, f32)> for BLBox {
@@ -698,9 +698,7 @@ impl From<(u32, u32, u32, u32)> for BLBox {
 }
 
 impl From<(f64, f64, f64, f64)> for BLRect {
-    #[inline] fn from(v: (f64, f64, f64, f64)) -> Self {
-        Self { x: v.0 as _, y: v.1 as _, w: v.2 as _, h: v.3 as _ }
-    }
+    #[inline] fn from(v: (f64, f64, f64, f64)) -> Self { Self { x: v.0, y: v.1, w: v.2, h: v.3 } }
 }
 impl From<(f32, f32, f32, f32)> for BLRect {
     #[inline] fn from(v: (f32, f32, f32, f32)) -> Self {
@@ -713,7 +711,7 @@ impl From<(u32, u32, u32, u32)> for BLRect {
     }
 }
 
-impl From<u32> for BLRgba32 { #[inline] fn from(value: u32) -> Self { Self {   value } } }
+impl From<u32> for BLRgba32 { #[inline] fn from(value: u32) -> Self { Self { value } } }
 impl From<(u8, u8, u8, u8)> for BLRgba32 {  // (r, g, b, a) -> 0xAARRGGBB
     #[inline] fn from(val: (u8, u8, u8, u8)) -> Self { Self { value:
         ((val.3 as u32) << 24) | ((val.0 as u32) << 16) | ((val.1 as u32) << 8) | (val.2 as u32)
@@ -736,7 +734,7 @@ impl BLRgba32 {
     #[inline] pub fn b(&self) -> u8 {  self.value as _ }
 }
 
-impl From<BLRgba32> for BLRgba64 { #[inline] fn from(v: BLRgba32)  -> Self { v.value.into() } }
+impl From<BLRgba32> for BLRgba64 { #[inline] fn from(v: BLRgba32) -> Self { v.value.into() } }
 impl From<u32> for BLRgba64 {
     #[inline] fn from(v: u32) -> Self { Self { value:
         ((((v >> 16) & 0xFF) as u64) << 40) | (((v >>  24) as u64) << 56) |

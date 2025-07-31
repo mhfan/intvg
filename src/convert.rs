@@ -125,7 +125,7 @@ fn convert_paint<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
     };
 
     #[allow(non_local_definitions)] impl From<(f32, f32)> for Point {
-        fn from(pt: (f32, f32)) -> Self { Self { x: pt.0, y: pt.1 } }
+        fn from((x, y): (f32, f32)) -> Self { Self { x, y } }
         // unsafe { std::mem::transmute(pt) }
     }
 
