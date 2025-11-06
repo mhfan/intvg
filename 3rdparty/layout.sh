@@ -9,8 +9,8 @@
 CUR=$(dirname $(readlink -f $0)) && cd $CUR && mkdir -p evg/gpac ftg/stroke
 echo "Layout 3rdparty libraries..."
 
-B2D_GIT=https://github.com/blend2d/blend2d.git
 B2D_GIT=https://github.com/mhfan/blend2d # patch to use single precision floating point instead
+B2D_GIT=https://github.com/blend2d/blend2d.git
 [ -e asmjit  ] || git clone https://github.com/asmjit/asmjit.git
 [ -e blend2d ] || git clone $B2D_GIT
 
@@ -21,9 +21,9 @@ GPAC_GIT=https://github.com/mhfan/gpac # patch to fix for GPAC_FIXED_POINT
 
 [ -e evg/ftgrays.c ] || {
 ln -s $GPAC/src/evg/{ftgrays.c,rast_soft.h,stencil.c,surface.c,raster_{argb,rgb,565,yuv}.c,raster3d.c} evg/;
-ln -s $GPAC/src/utils/{path2d{,_stroker},math,alloc,color,error}.c evg/; # XXX: constants.c
-ln -s $GPAC/include/gpac/{evg,setup,constants,maths,color,path2d,tools,thread}.h evg/gpac/;
-touch evg/gpac/{Remotery,config_file,configuration,main,module,version}.h;
+ln -s $GPAC/src/utils/{path2d{,_stroker},math,alloc,color,error}.c evg/; # XXX: constants.c, utf.c
+ln -s $GPAC/include/gpac/{evg,setup,constants,maths,color,path2d,tools,thread,utf}.h evg/gpac/;
+touch evg/gpac/{Remotery,config_file,configuration,main,module,version,rmt_ws}.h;
 }
 
 FT2=~/Devel/freetype2

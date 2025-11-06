@@ -5,7 +5,8 @@
  * Copyright (c) 2023 M.H.Fan, All rights reserved.             *
  ****************************************************************/
 
-#![allow(non_snake_case)] #![allow(unused)] #![allow(clippy::new_without_default)]
+#![allow(non_upper_case_globals)] #![allow(clippy::enum_variant_names)]
+#![allow(unused)] #![allow(clippy::new_without_default)]
 
 //pub mod blend2d  {    // https://blend2d.com
 use core::{mem, ptr::{self, null, null_mut}};
@@ -26,7 +27,7 @@ mod b2d_ffi { include!(concat!(env!("OUT_DIR"), "/blend2d.rs")); }  use b2d_ffi:
     ($v:expr) => { safe_dbg!($v, 0) };
 }
 
-//  https://blend2d.com/doc/group__blend2d__api__object.html
+//  https://blend2d.com/doc/group__bl__object.html
 fn object_init<T>() -> T { // for BLObjectCore
     let mut s = mem::MaybeUninit::<T>::uninit();
     unsafe { ptr::write_bytes(s.as_mut_ptr(), 0, 1); s.assume_init() }
@@ -37,7 +38,7 @@ impl Drop for BLContext {
     #[inline] fn drop(&mut self) { safe_dbg!(bl_context_destroy(&mut self.0)); }
 }
 
-impl BLContext { //  https://blend2d.com/doc/group__blend2d__api__rendering.html
+impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
     #[inline] pub fn new(img: &mut BLImage) -> Self {
         /* let mut  cci: BLContextCreateInfo = object_init();
         let mut info: BLRuntimeSystemInfo = object_init();
@@ -272,7 +273,7 @@ impl BLContext { //  https://blend2d.com/doc/group__blend2d__api__rendering.html
 
 pub struct BLImage(BLImageCore);
 impl Drop for BLImage { #[inline] fn drop(&mut self) { safe_dbg!(bl_image_destroy(&mut self.0)); } }
-impl BLImage { //  https://blend2d.com/doc/group__blend2d__api__imaging.html
+impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
     #[inline] pub fn new(w: u32, h: u32, fmt: BLFormat) -> Self {
         let mut img = object_init();
         //safe_dbg!(bl_image_create(&mut img, w as _, h as _, fmt));
@@ -290,10 +291,9 @@ impl BLImage { //  https://blend2d.com/doc/group__blend2d__api__imaging.html
         safe_dbg!(bl_format_info_query(&mut di, BLFormat::BL_FORMAT_PRGB32));
         let si = unsafe { ptr::read(&di) };
 
-        let mut rgba_opt = unsafe {
-            ptr::read(&di.__bindgen_anon_1.__bindgen_anon_2) };
+        let rgba_opt = unsafe {
+            &mut di.__bindgen_anon_1.__bindgen_anon_2 };
         rgba_opt.r_shift =  0; rgba_opt.g_shift =  8; rgba_opt.b_shift = 16;
-        unsafe { ptr::write(&mut di.__bindgen_anon_1.__bindgen_anon_2, rgba_opt); }
 
         let mut imgd = BLImageData::new();
         safe_dbg!(bl_image_get_data(&self.0, &mut imgd));
@@ -354,9 +354,9 @@ impl BLImageData {
     //#[inline] pub fn flags (&self) -> u32 { self.flags }
 }
 
-pub struct BLFont(BLFontCore); //  https://blend2d.com/doc/group__blend2d__api__text.html
+pub struct BLFont(BLFontCore); //  https://blend2d.com/doc/group__bl__text.html
 impl Drop for BLFont { #[inline] fn drop(&mut self) { safe_dbg!(bl_font_destroy(&mut self.0)); } }
-impl BLFont {   // TODO: a bunch of the interfaces need to regard
+impl BLFont {   // TODO: a bunch of interfaces need to be regarded
     #[inline] pub fn new(face: &BLFontFace, size: f32) -> Self {
         let mut font = object_init();   safe_dbg!(bl_font_init(&mut font));
 
@@ -411,16 +411,17 @@ impl BLStrokeOptions {
 
     #[inline] pub fn set_options(&mut self, sc: BLStrokeCap, ec: BLStrokeCap,
         join: BLStrokeJoin/*, to: BLStrokeTransformOrder*/) {   // XXX:
-            let mut options = unsafe {
-                ptr::read(&self.0.__bindgen_anon_1.__bindgen_anon_1) };
+        let options = unsafe {
+            &mut self.0.__bindgen_anon_1.__bindgen_anon_1 };
         options.start_cap = sc as _;     options.end_cap = ec as _;
         options.join = join as _;       //options.transform_order = to as _;
-        unsafe { ptr::write(&mut self.0.__bindgen_anon_1.__bindgen_anon_1, options); }
     }
 
     #[inline] pub fn set_dash(&mut self, offset: f32, dash: &[f32]) {
         self.0.dash_offset = offset as _;
-        safe_dbg!(bl_array_assign_deep(&mut self.0.dash_array, &BLDashArray::new(dash).0));
+        //safe_dbg!(bl_array_assign_deep(&mut self.0.dash_array, &BLDashArray::new(dash).0));
+        safe_dbg!(bl_array_assign_deep(&mut (&mut self.0.__bindgen_anon_2.dash_array)._base,
+            &BLDashArray::new(dash).0));
     }
 }
 
@@ -487,7 +488,7 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
 
     #[inline] pub fn get_scaling(&self) -> (f32, f32) {
         let mat = unsafe {
-            ptr::read(&self.__bindgen_anon_1.__bindgen_anon_1) };
+            &self.__bindgen_anon_1.__bindgen_anon_1 };
         (mat.m00 as _, mat.m10 as _)
     }
 

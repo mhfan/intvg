@@ -9,7 +9,7 @@
 
  fn bench_engine_2d(c: &mut Criterion) {
     use intvg::{tinyvg::TVGImage, render::Render, convert::Convert};
-    let mut group = c.benchmark_group("calc24");
+    let mut group = c.benchmark_group("intvg");
     group.sample_size(10);
 
     let tvg = TVGImage::from_usvg(

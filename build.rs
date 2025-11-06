@@ -1,5 +1,5 @@
 
-use std::{env, path::Path};
+use std::{env, path::{Path, PathBuf}};
 
 //  https://doc.rust-lang.org/stable/cargo/reference/build-scripts.html
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -13,10 +13,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let output = std::process::Command::new("git")
         .args(["rev-parse", "--short", "HEAD"]).output()?;
     println!("cargo:rustc-env=BUILD_GIT_HASH={}", String::from_utf8(output.stdout)?);
-    println!("cargo:rerun-if-changed={}", Path::new(".git").join("index").display());
+    println!("cargo:rerun-if-changed={}", PathBuf::from(".git/index").display());
 
-    std::process::Command::new(Path::new("3rdparty").join("layout.sh")).status()?;
-    #[allow(unused)] let path = std::path::PathBuf::from(env::var("OUT_DIR")?);
+    //std::process::Command::new(PathBuf::from("3rdparty/layout.sh")).status()?;
+    #[allow(unused)] let path = PathBuf::from(env::var("OUT_DIR")?);
     #[cfg(feature = "b2d")] binding_b2d(&path)?;
     #[cfg(feature = "evg")] binding_evg(&path)?;
 
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let (ftg_dir, module) = (Path::new("3rdparty").join("ftg"), "ftgrays");
+    let (ftg_dir, module) = (PathBuf::from("3rdparty/ftg"), "ftgrays");
     cc::Build::new().flag("-std=c17").flag("-pedantic").define("STANDALONE_", None)
         .define("FALL_THROUGH", "((void)0)").file(ftg_dir.join("ftgrays.c"))
         .files(glob::glob(&format!("{}/stroke/*.c", ftg_dir.display()))?
@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "evg")] fn binding_evg(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let (evg_dir, module) = (Path::new("3rdparty").join("evg"), "gpac_evg");
+    let (evg_dir, module) = (PathBuf::from("3rdparty/evg"), "gpac_evg");
     #[allow(unused_mut)] let mut bgen = bindgen::builder();
 
     let mut cc = cc::Build::new();
@@ -96,8 +96,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "b2d")] fn binding_b2d(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let b2d_src = Path::new("3rdparty").join("blend2d").join("src");
-    let jit_src = Path::new("3rdparty").join("asmjit") .join("src");
+    let mut b2d_src = PathBuf::from("3rdparty/blend2d/blend2d");
+    let mut jit_src = PathBuf::from("3rdparty/asmjit/asmjit");
+    if !b2d_src.exists() { b2d_src.set_file_name("src"); }
+    if !jit_src.exists() { jit_src.set_file_name("src"); }
     #[allow(unused_mut)] let mut bgen = bindgen::builder();
     let module = "blend2d"; // "blend2d_bindings";
 
@@ -155,11 +157,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cc//.flag("-Wall").flags("-Wextra").flag("-Wonversion") // ignore all warning flags
             .flag("-fno-exceptions").flag("-fno-rtti").flag("-fvisibility=hidden")
             .flag("-fno-math-errno").flag("-fno-threadsafe-statics")
-            .flag_if_supported("-ftree-vectorize").flag("-fmerge-all-constants")
-            .flag_if_supported("-mllvm").flag_if_supported("--disable-loop-idiom-all");
+            .flag("-fmerge-all-constants").flag_if_supported("-ftree-vectorize")
+            .flag_if_supported("-mllvm")  .flag_if_supported("--disable-loop-idiom-all");
 
         if cfg!(not(target_vendor = "apple")) { cc.flag("-fno-semantic-interposition"); }
-        if env::var("CARGO_CFG_TARGET_OS").unwrap().as_str() == "ios" { //cfg!(target_os = "ios")
+        if env::var("CARGO_CFG_TARGET_OS")?.as_str() == "ios" { //cfg!(target_os = "ios")
             cc  .flag("-fno-trapping-math").flag("-fno-finite-math-only")
                 .flag_if_supported("-fno-enforce-eh-specs");
         }
@@ -196,17 +198,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     cc.flag("-msse2");
             });
         }
-    }
 
-    if cfg!(any(target_arch = "arm", target_arch = "aarch64")) {
-        let simd_flag = "-mfpu=neon-vfpv4";
-        cc.is_flag_supported(simd_flag).is_ok_and(|bl| bl).then(|| cc.flag(simd_flag)
-            .define("BL_TARGET_OPT_ASIMD", None).define("BL_BUILD_OPT_ASIMD", None));
-    }
+        if cfg!(any(target_arch = "arm", target_arch = "aarch64")) {
+            let simd_flag = "-mfpu=neon-vfpv4";
+            cc.is_flag_supported(simd_flag)
+                .is_ok_and(|bl| bl).then(|| cc.flag(simd_flag)
+                .define("BL_TARGET_OPT_ASIMD", None).define("BL_BUILD_OPT_ASIMD", None));
+        }
 
-    if cfg!(target_arch = "aarch64") { let simd_flag = "-march=armv8-a+aes+crc";
-        cc.is_flag_supported(simd_flag).is_ok_and(|bl| bl).then(|| cc.flag(simd_flag)
-            .define("BL_TARGET_OPT_ASIMD_CRYPTO", None).define("BL_BUILD_OPT_ASIMD_CRYPTO", None));
+        if cfg!(target_arch = "aarch64") { let simd_flag = "-march=armv8-a+aes+crc";
+            cc.is_flag_supported(simd_flag)
+                .is_ok_and(|bl| bl).then(|| cc.flag(simd_flag)
+                .define("BL_TARGET_OPT_ASIMD_CRYPTO", None)
+                .define("BL_BUILD_OPT_ASIMD_CRYPTO", None));
+        }
     }
 
     cc.cpp(true).flag("-std=c++17").define("ASMJIT_EMBED", None)
@@ -216,7 +221,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             jit_src.display()))?.filter_map(Result::ok))
         .files(glob::glob(&format!("{}/**/*.cpp",
             b2d_src.display()))?.filter_map(|f|
-                f.ok().filter(|f| !f.ends_with("_test.cpp"))))
+                f.ok().filter(|f| !f.to_string_lossy().contains("_test"))))
+        .include(b2d_src.parent().unwrap()).include(jit_src.parent().unwrap())
         .include(&b2d_src).include(jit_src).opt_level(3).define("NDEBUG", None).compile(module);
     //println!("cargo:rustc-link-lib=rt");  // https://blend2d.com/doc/build-instructions.html
 
@@ -227,7 +233,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .derive_copy(false).derive_debug(false).merge_extern_blocks(true)
         //.derive_hash(false).derive_partialeq(false).derive_eq(false) // XXX: not work for enum?
         .allowlist_function("bl.*").allowlist_type("BL.*").layout_tests(false)
-        //.clang_args(["-x", "c++", "-std=c++17", &format!("-I{b2d_src}")])
+        .clang_args(["-x", "c++", "-std=c++17",
+            &format!("-I{}", b2d_src.parent().unwrap().display())])
         //.blocklist_item("*(Virt|Impl)") // XXX: can not be blocked
         //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()?.write_to_file(path.join(format!("{module}.rs")))?;
@@ -236,9 +243,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "ovg")] fn binding_ovg(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let mut ovg_dir = Path::new("3rdparty").join("amanithvg").join("include");
+    let mut ovg_dir = PathBuf::from("3rdparty/amanithvg/include");
 
-    //env::var("CARGO_MANIFEST_DIR").unwrap()
     // XXX: need to set environment variable before `cargo r/t`:
     // DYLD_FALLBACK_LIBRARY_PATH=$PWD/3rdparty/amanithvg/lib/macosx/ub/sre/standalone
 
@@ -259,8 +265,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "ugl")] fn binding_ugl(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let ugl_inc = Path::new("3rdparty").join("micro-gl").join("include");
-    let module = "microgl";
+    let (ugl_inc, module) = (PathBuf::from("3rdparty/micro-gl/include"), "microgl");
 
     let mut ugl_cpp = Path::new("src").join(module).with_extension("cpp");
     cc::Build::new().cpp(true).flag("-std=c++17").file(&ugl_cpp)

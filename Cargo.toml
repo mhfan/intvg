@@ -17,11 +17,11 @@ keywords = [ "TinyVG", "SVG", "vector-graphic", "EVG", "Blend2D" ]
 #byteorder = "1.4"  # use <T>::(from/to)_le_bytes instead
 #tiny-skia-path = "0.11"
 tiny-skia = "0.11"
-kurbo = "0.11"  # Bezier curves utils
-usvg  = "0.44"
+kurbo = "0.12"  # Bezier curves utils
+usvg  = "0.45"
 
 #build-time = { version = "0.1", git = "https://github.com/AlephAlpha/build-time" }
-png = { version = "0.17", optional = true }
+png = { version = "0.18", optional = true }
 
 [lib]
 # Disable doctests as a workaround for https://github.com/rust-lang/rust-bindgen/issues/1313
@@ -46,12 +46,12 @@ name = "engine_2d"
 harness = false
 
 [dev-dependencies]
-criterion = "0.5"
-#rexpect = "0.5"
+criterion = "0.7"
+#rexpect = "0.6"
 
 [build-dependencies]
 cc = { version = "1.2", features = [ "parallel" ] }
-bindgen = "0.70"
+bindgen = "0.72"
 chrono = "0.4"
 glob = "0.3"
 #walkdir = "2.4"
