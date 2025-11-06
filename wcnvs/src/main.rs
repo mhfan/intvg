@@ -3,8 +3,8 @@
 use dioxus::{prelude::*, web::WebEventExt};
 
 //  https://github.com/nathan-barry/rust-site/blob/main/src/projects/game_of_life.rs
-use web_sys::{HtmlCanvasElement, CanvasRenderingContext2d, Path2d};
-use wasm_bindgen::{JsCast/*, prelude::*, closure::Closure*/};
+use web_sys::{HtmlCanvasElement, CanvasRenderingContext2d, Path2d,
+    js_sys, wasm_bindgen::{JsCast, closure::Closure}};
 
 fn main() { launch(app); }
 mod render;
@@ -86,9 +86,8 @@ fn app() -> Element {
         //let canvas: HtmlCanvasElement = web_sys::window().unwrap().document().unwrap()
         //    .get_element_by_id("canvas").unwrap().dyn_into().unwrap();
 
-        let closure = wasm_bindgen::closure::
-            Closure::<dyn FnMut(_)>::new(move |entries: js_sys::Array| {
-            for entry in entries.iter() {
+        let closure = Closure::<dyn FnMut(_)>::new(move
+            |entries: js_sys::Array| for entry in entries.iter() {
                 let entry: web_sys::ResizeObserverEntry = entry.dyn_into().unwrap();
                 if  entry.target().get_attribute("id")
                     .is_some_and(|id| id != "canvas") { return }
@@ -110,7 +109,6 @@ fn app() -> Element {
 
                 let fdata = fdata.as_ref().unwrap();
                 draw_canvas(&ctx2d, &fdata.0, &fdata.1, canvas.width(), canvas.height());
-            }
         }); // Closure::wrap(Box::new() as Box<dyn FnMut(_)>);
 
         //window.set_onresize(Some(closure.as_ref().unchecked_ref()));  closure.forget();
@@ -130,16 +128,16 @@ fn app() -> Element {
     rsx! { style { {head_style} }
         canvas { id: "canvas", onmounted: init_canvas }
         input { r#type: "file", accept: ".tvg, .svg", id: "picker",
-            onchange: move |evt| async move { if let Some(feng) = &evt.files() {
+            onchange: move |evt| async move {
                 let canvas: HtmlCanvasElement = web_sys::window().unwrap().document().unwrap()
                     .get_element_by_id("canvas").unwrap().dyn_into().unwrap();
                 let ctx2d = canvas.get_context("2d").unwrap().unwrap().dyn_into().unwrap();
 
-                let file = feng.files()[0].clone(); //evt.value();
-                let data = feng.read_file(&file).await.unwrap();
+                let fd = &evt.files()[0];   let file = fd.name();
+                let data = fd.read_bytes().await.unwrap().to_vec();
                 draw_canvas(&ctx2d, &data, &file, canvas.width(), canvas.height());
                 file_data.set(Some((data, file)));
-            } }
+            }
         }
     }
 }
