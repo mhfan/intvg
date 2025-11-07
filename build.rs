@@ -16,10 +16,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed={}", PathBuf::from(".git/index").display());
 
     //std::process::Command::new(PathBuf::from("3rdparty/layout.sh")).status()?;
-    #[allow(unused)] let path = PathBuf::from(env::var("OUT_DIR")?);
+    #[allow(unused)] let path = PathBuf::from("target/bindings");
+    std::fs::create_dir_all(&path)?;    // env::var("OUT_DIR")?
+
     #[cfg(feature = "b2d")] binding_b2d(&path)?;
     #[cfg(feature = "evg")] binding_evg(&path)?;
-
     #[cfg(feature = "ftg")] binding_ftg(&path)?;
     #[cfg(feature = "ovg")] binding_ovg(&path)?;
     #[cfg(feature = "ugl")] binding_ugl(&path)?;
@@ -60,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()?.write_to_file(path.join(format!("{module}.rs")))?;
+        .generate()?.write_to_file(path.join(module).with_extension("rs"))?;
 
     Ok(())
 }
@@ -90,7 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge_extern_blocks(true).new_type_alias("Fixed")//.allowlist_item("GF_LINE_.*")
         .layout_tests(false).derive_copy(false).derive_debug(false)
         //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()?.write_to_file(path.join(format!("{module}.rs")))?;
+        .generate()?.write_to_file(path.join(module).with_extension("rs"))?;
 
     Ok(())
 }
@@ -237,7 +238,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &format!("-I{}", b2d_src.parent().unwrap().display())])
         //.blocklist_item("*(Virt|Impl)") // XXX: can not be blocked
         //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()?.write_to_file(path.join(format!("{module}.rs")))?;
+        .generate()?.write_to_file(path.join(module).with_extension("rs"))?;
 
     Ok(())
 }
@@ -282,7 +283,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: true })
         .allowlist_function("(canvas|path).*").layout_tests(false)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()?.write_to_file(path.join(format!("{module}.rs")))?;
+        .generate()?.write_to_file(path.join(module).with_extension("rs"))?;
 
     Ok(())
 }

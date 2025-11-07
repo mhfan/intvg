@@ -11,7 +11,7 @@ pub mod convert;
 
 #[cfg(feature = "ugl")] pub mod microgl {   pub use ugl_ffi::*;
      #[allow(non_camel_case_types)] #[allow(non_upper_case_globals)] //#[allow(non_snake_case)]
-    mod ugl_ffi { include!(concat!(env!("OUT_DIR"), "/microgl.rs")); }
+    mod ugl_ffi { include!("../target/bindings/microgl.rs"); }
 }
 
 /*  TODO: https://github.com/sammycage/plutovg
@@ -22,7 +22,7 @@ pub mod convert;
 
 #[cfg(feature = "ftg")] pub mod ftgrays  {  pub use ftg_ffi::*; // XXX:
     #[allow(non_snake_case)] #[allow(non_camel_case_types)] //#[allow(non_upper_case_globals)]
-    mod ftg_ffi { include!(concat!(env!("OUT_DIR"), "/ftgrays.rs")); } // ftg_bindings.rs
+    mod ftg_ffi { include!("../target/bindings/ftgrays.rs"); }  // ftg_bindings.rs
 
     impl From<(FT_Pos, FT_Pos)> for FT_Vector {
         fn from(v: (FT_Pos, FT_Pos)) -> Self { Self { x: v.0, y: v.1 } }

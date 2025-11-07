@@ -9,7 +9,7 @@
 #![allow(unused)] #![allow(clippy::too_many_arguments)]
 
 //pub mod openvg {   // https://www.amanithvg.com // avg_bindings.rs
-mod ovg_ffi { include!(concat!(env!("OUT_DIR"), "/openvg.rs")); }    use ovg_ffi::*;
+mod ovg_ffi { include!("../target/bindings/openvg.rs"); }   use ovg_ffi::*;
 
 const VG_PATH_FORMAT_STANDARD: i32 = 0;
 

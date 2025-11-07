@@ -8,7 +8,7 @@
 //pub mod gpac_evg {    // https://github.com/gpac/gpac/tree/master/src/evg/
 #[allow(non_snake_case)] #[allow(non_camel_case_types)] //#[allow(non_upper_case_globals)]
 #[allow(unused)] //#[allow(clippy::approx_constant)] #[allow(clippy::useless_transmute)]
-mod evg_ffi { include!(concat!(env!("OUT_DIR"), "/gpac_evg.rs")); }     use evg_ffi::*;
+mod evg_ffi { include!("../target/bindings/gpac_evg.rs"); }     use evg_ffi::*;
 pub use evg_ffi::{GF_Point2D, GF_Rect, GF_Color, GF_Matrix2D, GF_PenSettings, GF_StencilType};
 
 /*#[macro_export] */macro_rules! safe_dbg { //($v:expr$(,$g:expr)?) => { unsafe { $v } };
@@ -232,7 +232,7 @@ impl Pixmap {
         sten.set_color(0xAA00FF00); pens.width = 10.into();
         surf.stroke_path(&path, &sten, &pens);
 
-        pixm.save_png(concat!("target", "/demo_evg.png")).unwrap();     //env!("OUT_DIR")
+        pixm.save_png("target/demo_evg.png").unwrap();
     }
 }
 

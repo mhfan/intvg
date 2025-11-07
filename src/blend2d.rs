@@ -18,7 +18,8 @@ pub use b2d_ffi::{BLFormat, BLPoint, BLMatrix2D, BLImageData, BLRgba, BLRgba64,
     BLLinearGradientValues, BLRadialGradientValues, BLConicGradientValues};
 
 #[allow(non_camel_case_types)] //#[allow(non_upper_case_globals)]     // blend2d_bindings
-mod b2d_ffi { include!(concat!(env!("OUT_DIR"), "/blend2d.rs")); }  use b2d_ffi::*;
+mod b2d_ffi { include!("../target/bindings/blend2d.rs"); }  use b2d_ffi::*;
+// concat!(env!("OUT_DIR"), "/blend2d.rs")  // BGEN_DIR
 
 /*#[macro_export] */macro_rules! safe_dbg { //($v:expr$(,$g:expr)?) => { unsafe { $v } };
     ($v:expr,$g:expr) => { match unsafe { $v } { // as u32
@@ -935,7 +936,7 @@ impl std::error::Error  for BLErr {
 
         ctx.fill_geometry_rgba32(&path, 0xFFFFFFFF.into());
         ctx.stroke_geometry_ext(&path, &linear);
-        let _ = img.write_to_file("target/demo_b2d.png");
+        let _ = img.write_to_file("target/demo_b2d.png");  //env::var("OUT_DIR")
         //BLContext::show_rtinfo();
     }
 }
