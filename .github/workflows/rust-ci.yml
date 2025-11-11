@@ -67,7 +67,7 @@ jobs:
         LD_LIBRARY_PATH: ${{github.workspace}}/3rdparty/amanithvg/lib/linux/x86_64/sre/standalone
       run: |
         cargo t -F "evg,b2d,ftg,ovg,ugl" -- --nocapture #cargo nextest r
-        cargo binstall dioxus-cli && cd wcnvs && dx build
+        cargo binstall -y dioxus-cli && cd wcnvs && dx build
 
     - name: Benchmark
       run: |

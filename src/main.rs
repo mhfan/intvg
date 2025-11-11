@@ -12,17 +12,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (cnt, mut args) = (env::args().count(), env::args());
     if   cnt < 2 { println!("Usage: {} <path-to-svg/tvg> [<path-to-tvg/png>] [-R <b2d|evg>]\n",
-            args.next().unwrap());  return Ok(())
+            args.next().unwrap());  return Ok(())   //env!("CARGO_BIN_NAME")
     }   // all unwrap are safe
 
     let mut path = args.nth(1).unwrap();
     let tvg = if path.ends_with(".tvg") {
         TVGImage::load_data(&mut BufReader::new(File::open(&path)?))?
     } else if path.ends_with(".svg") { TVGImage::from_usvg(&fs::read(&path)?)?
-    } else { return Err("only support .svg & .tvg files".into()) };
+    } else { return Err("Only support .svg & .tvg files".into()) };
 
     if 2 < cnt { path = args.next().unwrap(); } else {
-        path.replace_range(path.rfind('.').unwrap().., ".png");
+        path.replace_range(path.rfind('.').unwrap_or(path.len()).., ".png");
     }
 
     if  path.ends_with(".tvg") {

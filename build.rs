@@ -1,5 +1,5 @@
 
-use std::{env, path::{Path, PathBuf}};
+use std::{env, path::{Path, PathBuf}, process::Command};
 
 //  https://doc.rust-lang.org/stable/cargo/reference/build-scripts.html
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -10,25 +10,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rustc-env=BUILD_TIMESTAMP={}",
         chrono::Local::now().format("%H:%M:%S%z %Y-%m-%d"));
 
-    let output = std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"]).output()?;
+    let output = Command::new("git").args(["rev-parse", "--short", "HEAD"]).output()?;
     println!("cargo:rustc-env=BUILD_GIT_HASH={}", String::from_utf8(output.stdout)?);
     println!("cargo:rerun-if-changed={}", PathBuf::from(".git/index").display());
 
-    //std::process::Command::new(PathBuf::from("3rdparty/layout.sh")).status()?;
-    #[allow(unused)] let path = PathBuf::from("target/bindings");
-    std::fs::create_dir_all(&path)?;    // env::var("OUT_DIR")?
+    //Command::new(PathBuf::from("3rdparty/layout.sh")).status()?;
+    #[allow(unused)] let odir = PathBuf::from("target/bindings");
+    std::fs::create_dir_all(&odir)?;    // env::var("OUT_DIR")?
 
-    #[cfg(feature = "b2d")] binding_b2d(&path)?;
-    #[cfg(feature = "evg")] binding_evg(&path)?;
-    #[cfg(feature = "ftg")] binding_ftg(&path)?;
-    #[cfg(feature = "ovg")] binding_ovg(&path)?;
-    #[cfg(feature = "ugl")] binding_ugl(&path)?;
+    #[cfg(feature = "b2d")] binding_b2d(&odir)?;
+    #[cfg(feature = "evg")] binding_evg(&odir)?;
+    #[cfg(feature = "ftg")] binding_ftg(&odir)?;
+    #[cfg(feature = "ovg")] binding_ovg(&odir)?;
+    #[cfg(feature = "ugl")] binding_ugl(&odir)?;
 
     Ok(())
 }
 
-#[cfg(feature = "ftg")] fn binding_ftg(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+#[cfg(feature = "ftg")] fn binding_ftg(odir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     #[derive(Debug)] struct DoctestComment;
     impl bindgen::callbacks::ParseCallbacks for DoctestComment {
         fn process_comment(&self, comment: &str) -> Option<String> {
@@ -61,12 +60,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()?.write_to_file(path.join(module).with_extension("rs"))?;
+        .generate()?.write_to_file(odir.join(module).with_extension("rs"))?;
 
     Ok(())
 }
 
-#[cfg(feature = "evg")] fn binding_evg(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+#[cfg(feature = "evg")] fn binding_evg(odir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let (evg_dir, module) = (PathBuf::from("3rdparty/evg"), "gpac_evg");
     #[allow(unused_mut)] let mut bgen = bindgen::builder();
 
@@ -91,12 +90,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge_extern_blocks(true).new_type_alias("Fixed")//.allowlist_item("GF_LINE_.*")
         .layout_tests(false).derive_copy(false).derive_debug(false)
         //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()?.write_to_file(path.join(module).with_extension("rs"))?;
+        .generate()?.write_to_file(odir.join(module).with_extension("rs"))?;
 
     Ok(())
 }
 
-#[cfg(feature = "b2d")] fn binding_b2d(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+#[cfg(feature = "b2d")] fn binding_b2d(odir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut b2d_src = PathBuf::from("3rdparty/blend2d/blend2d");
     let mut jit_src = PathBuf::from("3rdparty/asmjit/asmjit");
     if !b2d_src.exists() { b2d_src.set_file_name("src"); }
@@ -238,12 +237,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &format!("-I{}", b2d_src.parent().unwrap().display())])
         //.blocklist_item("*(Virt|Impl)") // XXX: can not be blocked
         //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()?.write_to_file(path.join(module).with_extension("rs"))?;
+        .generate()?.write_to_file(odir.join(module).with_extension("rs"))?;
 
     Ok(())
 }
 
-#[cfg(feature = "ovg")] fn binding_ovg(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+#[cfg(feature = "ovg")] fn binding_ovg(odir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut ovg_dir = PathBuf::from("3rdparty/amanithvg/include");
 
     // XXX: need to set environment variable before `cargo r/t`:
@@ -255,7 +254,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: true })
         .allowlist_function("vg.*").allowlist_type("VG.*").layout_tests(false)
         //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()?.write_to_file(path.join("openvg.rs"))?;
+        .generate()?.write_to_file(odir.join("openvg.rs"))?;
 
     ovg_dir.pop(); ovg_dir.push("lib"); ovg_dir.push(env::consts::OS); //ovg_dir.push("ub");
     ovg_dir.push(env::consts::ARCH); ovg_dir.push("sre"); ovg_dir.push("standalone");
@@ -265,7 +264,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(feature = "ugl")] fn binding_ugl(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+#[cfg(feature = "ugl")] fn binding_ugl(odir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let (ugl_inc, module) = (PathBuf::from("3rdparty/micro-gl/include"), "microgl");
 
     let mut ugl_cpp = Path::new("src").join(module).with_extension("cpp");
@@ -283,7 +282,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: true })
         .allowlist_function("(canvas|path).*").layout_tests(false)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()?.write_to_file(path.join(module).with_extension("rs"))?;
+        .generate()?.write_to_file(odir.join(module).with_extension("rs"))?;
 
     Ok(())
 }

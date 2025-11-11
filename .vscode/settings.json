@@ -5,5 +5,6 @@
 	"3rdparty/micro-gl/include/microgl/micro-alloc/include",
 	"3rdparty/micro-gl/include/microgl/micro-tess/include",
 	"3rdparty/micro-gl/include",
+	"3rdparty/blend2d", "3rdparty/asmjit",
 	"3rdparty/blend2d/src", "3rdparty/asmjit/src" ]
 }

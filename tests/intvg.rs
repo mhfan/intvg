@@ -24,13 +24,13 @@
         let path = entry.path();    println!("Test {}:", path.display());
 
         //if  path.as_os_str() != "data/tiger.tvg" { continue }   // to test specific file
-        let ext = path.extension().unwrap();
+        let Some(ext) = path.extension() else { continue };
         let tvg = if ext == "tvg" {
             TVGImage::load_data(&mut BufReader::new(File::open(&path)?))?
         } else if ext == "svg" { TVGImage::from_usvg(&fs::read(&path)?)?
         } else { continue }; // "data/*.png"
 
-        let stem = path.file_stem().unwrap().to_str().unwrap();
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap();
         let outp = idir.join(stem).with_extension("tvg");
         tvg.save_data(&mut BufWriter::new(File::create(&outp)?))?;
 
