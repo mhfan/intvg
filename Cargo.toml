@@ -32,7 +32,7 @@ ovg = []
 ugl = []
 
 b2d = []
-b2d_sfp = [ "b2d" ]
+b2d_sfp = [ "b2d" ]     # CXX=g++-15 CC=gcc-15 cargo b -F "b2d_sfp"
 
 ftg = []
 evg_fixed = [ "evg" ] # quite slow than floating point on Apple M1
