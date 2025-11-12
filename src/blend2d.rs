@@ -9,13 +9,17 @@
 #![allow(unused)] #![allow(clippy::new_without_default)]
 
 //pub mod blend2d  {    // https://blend2d.com
-use core::{mem, ptr::{self, null, null_mut}};
 use std::ffi::CString;
+use core::{mem, ptr::{self, null, null_mut}};
 
 pub use b2d_ffi::{BLFormat, BLPoint, BLMatrix2D, BLImageData, BLRgba, BLRgba64,
     BLRgba32, BLFillRule, BLStrokeCap, BLStrokeJoin, BLCompOp, BLImageScaleFilter,
     BLRect, BLBox, BLLine, BLArc, BLCircle, BLEllipse, BLTriangle, BLRoundRect, BLHitTest,
     BLLinearGradientValues, BLRadialGradientValues, BLConicGradientValues};
+
+#[cfg(feature = "b2d_sfp")] #[allow(non_camel_case_types)] type f64 = f32;
+#[cfg(feature = "b2d_sfp")] type F32 = core::primitive::f64; // XXX: API wrapper differ in f32
+#[cfg(not(feature = "b2d_sfp"))] type F32 = f32;
 
 #[allow(non_camel_case_types)] //#[allow(non_upper_case_globals)]     // blend2d_bindings
 mod b2d_ffi { include!("../target/bindings/blend2d.rs"); }  use b2d_ffi::*;
@@ -74,17 +78,17 @@ impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
     #[inline] pub fn set_fill_rule(&mut self, fill_rule: BLFillRule) {
         safe_dbg!(bl_context_set_fill_rule(&mut self.0, fill_rule));
     }
-    #[inline] pub fn set_fill_alpha(&mut self, alpha: f32) {
+    #[inline] pub fn set_fill_alpha(&mut self, alpha: f64) {
         safe_dbg!(bl_context_set_fill_alpha(&mut self.0, alpha as _));
     }
 
-    #[inline] pub fn set_stroke_alpha(&mut self, alpha: f32) {
+    #[inline] pub fn set_stroke_alpha(&mut self, alpha: f64) {
         safe_dbg!(bl_context_set_stroke_alpha(&mut self.0, alpha as _));
     }
     #[inline] pub fn set_stroke_style(&mut self, style: &dyn B2DStyle) {
         safe_dbg!(bl_context_set_stroke_style(&mut self.0, style as *const _ as _));
     }
-    #[inline] pub fn set_stroke_width(&mut self, width: f32) {
+    #[inline] pub fn set_stroke_width(&mut self, width: f64) {
         safe_dbg!(bl_context_set_stroke_width(&mut self.0, width as _));
     }
     #[inline] pub fn set_stroke_caps(&mut self, caps: BLStrokeCap) {
@@ -99,12 +103,12 @@ impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
     #[inline] pub fn set_stroke_join(&mut self, join: BLStrokeJoin) {
         safe_dbg!(bl_context_set_stroke_join(&mut self.0, join));
     }
-    #[inline] pub fn set_stroke_miter_limit(&mut self, miter_limit: f32) {
+    #[inline] pub fn set_stroke_miter_limit(&mut self, miter_limit: f64) {
         safe_dbg!(bl_context_set_stroke_miter_limit(&mut self.0, miter_limit as _));
     }
-    #[inline] pub fn set_stroke_dash(&mut self, offset: f32, dash: &[f32]) {
+    #[inline] pub fn set_stroke_dash(&mut self, offset: f64, dash: &[f64]) {
         safe_dbg!(bl_context_set_stroke_dash_offset(&mut self.0, offset as _));
-        safe_dbg!(bl_context_set_stroke_dash_array(&mut self.0, &BLDashArray::new(dash).0));
+        safe_dbg!(bl_context_set_stroke_dash_array(&mut self.0, &BLArrayFP::new(dash).0));
     }
     #[inline] pub fn set_stroke_options(&mut self, options: BLStrokeOptions) {
         safe_dbg!(bl_context_set_stroke_options(&mut self.0, &options.0));
@@ -199,31 +203,25 @@ impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
         safe_dbg!(bl_context_apply_transform_op(&mut self.0,
             BLTransformOp::BL_TRANSFORM_OP_TRANSFORM, mat as *const _ as _));
     }
-    #[inline] pub fn scale(&mut self, sx: f32, sy: f32) {
-        #[cfg(feature = "b2d_sfp")] let scale = &[sx, sy];
-        #[cfg(not(feature = "b2d_sfp"))] let scale = &[sx as _, sy as f64];
+    #[inline] pub fn scale(&mut self, sx: f64, sy: f64) {
         safe_dbg!(bl_context_apply_transform_op(&mut self.0,
-            BLTransformOp::BL_TRANSFORM_OP_SCALE, scale.as_ptr() as _));
+            BLTransformOp::BL_TRANSFORM_OP_SCALE, BLArrayFP::new(&[sx, sy]).get_data()));
     }
-    #[inline] pub fn translate(&mut self, tx: f32, ty: f32) {
-        #[cfg(feature = "b2d_sfp")] let pos = &[tx, ty];
-        #[cfg(not(feature = "b2d_sfp"))] let pos = &[tx as _, ty as f64];
+    #[inline] pub fn translate(&mut self, tx: f64, ty: f64) {
         safe_dbg!(bl_context_apply_transform_op(&mut self.0,
-            BLTransformOp::BL_TRANSFORM_OP_TRANSLATE, pos.as_ptr() as _));
+            BLTransformOp::BL_TRANSFORM_OP_TRANSLATE, BLArrayFP::new(&[tx, ty]).get_data()));
     }
-    #[inline] pub fn rotate(&mut self, angle: f32, orig: Option<(f32, f32)>) {
+    #[inline] pub fn rotate(&mut self, angle: f64, orig: Option<(f64, f64)>) {
         let orig = orig.unwrap_or((0., 0.));
-        #[cfg(feature = "b2d_sfp")] let rot = &[angle, orig.0, orig.1];
-        #[cfg(not(feature = "b2d_sfp"))]
-            let rot = &[angle as _, orig.0 as _, orig.1 as f64];
+        let rot = BLArrayFP::new(&[angle, orig.0, orig.1]);
         safe_dbg!(bl_context_apply_transform_op(&mut self.0,
-            BLTransformOp::BL_TRANSFORM_OP_ROTATE_PT, rot.as_ptr() as _));
+            BLTransformOp::BL_TRANSFORM_OP_ROTATE_PT, rot.get_data()));
     }
 
     #[inline] pub fn set_comp_op(&mut self, cop: BLCompOp) {
         safe_dbg!(bl_context_set_comp_op(&mut self.0, cop));
     }
-    #[inline] pub fn set_global_alpha(&mut self, alpha: f32) {
+    #[inline] pub fn set_global_alpha(&mut self, alpha: f64) {
         safe_dbg!(bl_context_set_global_alpha(&mut self.0, alpha as _));
     }
 
@@ -282,7 +280,7 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
     }
 
     #[inline] pub fn from_buffer(w: u32, h: u32, fmt: BLFormat, buf: &mut [u8],
-        stride: u32) -> Self {  let mut img = object_init();
+        stride: i32) -> Self {  let mut img = object_init();
         safe_dbg!(bl_image_init_as_from_data(&mut img, w as _, h as _, fmt, buf.as_mut_ptr() as _,
             stride as _, BLDataAccessFlags::BL_DATA_ACCESS_RW, None, null_mut()));  Self(img)
     }
@@ -348,7 +346,7 @@ impl BLImageData {
         unsafe { std::slice::from_raw_parts(self.pixel_data as *const u8,
             (self.stride as i32 * self.size.h) as usize) }
     }
-    #[inline] pub fn stride(&self) -> u32 { self.stride as _ }
+    #[inline] pub fn stride(&self) -> i32 { self.stride as _ }
     #[inline] pub fn height(&self) -> u32 { self.size.h as _ }
     #[inline] pub fn width (&self) -> u32 { self.size.w as _ }
     //#[inline] pub fn format(&self) -> u32 { self.format }
@@ -407,8 +405,8 @@ impl BLStrokeOptions {
         safe_dbg!(bl_stroke_options_init(&mut option));    Self(option)
     }
 
-    #[inline] pub fn set_width(&mut self, width: f32) { self.0.width = width as _; }
-    #[inline] pub fn set_miter_limit(&mut self, miter: f32) { self.0.miter_limit = miter as _; }
+    #[inline] pub fn set_width(&mut self, width: f64) { self.0.width = width as _; }
+    #[inline] pub fn set_miter_limit(&mut self, miter: f64) { self.0.miter_limit = miter as _; }
 
     #[inline] pub fn set_options(&mut self, sc: BLStrokeCap, ec: BLStrokeCap,
         join: BLStrokeJoin/*, to: BLStrokeTransformOrder*/) {   // XXX:
@@ -418,11 +416,11 @@ impl BLStrokeOptions {
         options.join = join as _;       //options.transform_order = to as _;
     }
 
-    #[inline] pub fn set_dash(&mut self, offset: f32, dash: &[f32]) {
+    #[inline] pub fn set_dash(&mut self, offset: f64, dash: &[f64]) {
         self.0.dash_offset = offset as _;
-        //safe_dbg!(bl_array_assign_deep(&mut self.0.dash_array, &BLDashArray::new(dash).0));
+        //safe_dbg!(bl_array_assign_deep(&mut self.0.dash_array, &BLArrayFP::new(dash).0));
         safe_dbg!(bl_array_assign_deep(&mut (&mut self.0.__bindgen_anon_2.dash_array)._base,
-            &BLDashArray::new(dash).0));
+            &BLArrayFP::new(dash).0));
     }
 }
 
@@ -431,26 +429,33 @@ impl BLApproximationOptions {
     #[inline] fn new() -> Self { Self {
         flatten_mode: BLFlattenMode::BL_FLATTEN_MODE_DEFAULT as _,
         offset_mode: BLOffsetMode::BL_OFFSET_MODE_DEFAULT as _, reserved_flags: [0; 6],
-        flatten_tolerance: 0.20, simplify_tolerance: 0.05, offset_parameter: 0.414213562
+        flatten_tolerance: 0.20, simplify_tolerance: 0.05, offset_parameter: 0.414_213_56
     } }
 }
 
-struct BLDashArray(BLArrayCore);
-impl Drop for BLDashArray {
+struct BLArrayFP(BLArrayCore);
+impl Drop for BLArrayFP {
     #[inline] fn drop(&mut self) { safe_dbg!(bl_array_destroy(&mut self.0)); }
 }
-impl BLDashArray {  #[cfg(feature = "b2d_sfp")]
-    #[inline] pub fn new(data: &[f32]) -> Self { let mut array = object_init();
-        safe_dbg!(bl_array_init(&mut array, BLObjectType::BL_OBJECT_TYPE_ARRAY_FLOAT32));
-        safe_dbg!(bl_array_append_data(&mut array, data.as_ptr() as _, data.len()));   Self(array)
+impl BLArrayFP {
+    #[inline] pub fn new(data: &[f64]) -> Self { let mut array = object_init();
+        safe_dbg!(bl_array_reserve(&mut array, data.len()));
+        //safe_dbg!(bl_array_assign_data(&mut array, data.as_ptr() as _, data.len()));
+        //safe_dbg!(bl_array_append_data(&mut array, data_ptr, data.len()));
+
+        if cfg!(feature = "b2d_sfp") {
+            safe_dbg!(bl_array_init(&mut array, BLObjectType::BL_OBJECT_TYPE_ARRAY_FLOAT32));
+            data.iter().for_each(|v| {
+                safe_dbg!(bl_array_append_f32(&mut array, *v as _)); });
+        } else {
+            safe_dbg!(bl_array_init(&mut array, BLObjectType::BL_OBJECT_TYPE_ARRAY_FLOAT64));
+            data.iter().for_each(|v| {
+                safe_dbg!(bl_array_append_f64(&mut array, *v as _)); });
+        }   Self(array)
     }
 
-    #[cfg(not(feature = "b2d_sfp"))]
-    #[inline] pub fn new(data: &[f32]) -> Self { let mut array = object_init();
-        safe_dbg!(bl_array_init(&mut array, BLObjectType::BL_OBJECT_TYPE_ARRAY_FLOAT64));
-        let data = data.iter().map(|v| *v as f64).collect::<Vec<_>>();
-        //safe_dbg!(bl_array_assign_data(&mut array, data.as_ptr() as _, data.len()));
-        safe_dbg!(bl_array_append_data(&mut array, data.as_ptr() as _, data.len()));   Self(array)
+    #[inline] pub fn get_data(&self) -> *const std::os::raw::c_void {
+        unsafe { bl_array_get_data(&self.0) }
     }
 }
 
@@ -463,13 +468,13 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
     #[inline] pub fn set_translation(&mut self, pos: &BLPoint) {
         safe_dbg!(bl_matrix2d_set_translation(self, pos.x, pos.y));
     }
-    #[inline] pub fn set_scaling(&mut self, sx: f32, sy: f32) {
+    #[inline] pub fn set_scaling(&mut self, sx: f64, sy: f64) {
         safe_dbg!(bl_matrix2d_set_scaling(self, sx as _, sy as _));
     }
     #[inline] pub fn set_skewing(&mut self, skew: &BLPoint) {
         safe_dbg!(bl_matrix2d_set_skewing(self, skew.x, skew.y));
     }
-    #[inline] pub fn set_rotation(&mut self, radius: f32, origin: &BLPoint) {
+    #[inline] pub fn set_rotation(&mut self, radius: f64, origin: &BLPoint) {
         safe_dbg!(bl_matrix2d_set_rotation(self, radius as _, origin.x, origin.y));
     }
 
@@ -487,10 +492,9 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
     #[inline] pub fn set_identity(&mut self) { safe_dbg!(bl_matrix2d_set_identity(self)); }
     #[inline] pub fn invert(&mut self, src: &Self) { safe_dbg!(bl_matrix2d_invert(self, src)); }
 
-    #[inline] pub fn get_scaling(&self) -> (f32, f32) {
+    #[inline] pub fn get_scaling(&self) -> (f64, f64) {
         let mat = unsafe {
-            &self.__bindgen_anon_1.__bindgen_anon_1 };
-        (mat.m00 as _, mat.m10 as _)
+            &self.__bindgen_anon_1.__bindgen_anon_1 };  (mat.m00 as _, mat.m10 as _)
     }
 
     #[inline] pub fn map_pointd(&self, pt: &BLPoint) -> BLPoint {
@@ -523,11 +527,11 @@ impl BLPath {
     }
 
     #[inline] pub fn arc_to(&mut self, center: &BLPoint, radius: &BLPoint,
-        start: f32, sweep: f32) { //, force_move_to
-        safe_dbg!(bl_path_arc_to(&mut self.0, center.x, center.y, radius.x, radius.y,
-            start as _, sweep as _, false));
+        start: f64, sweep: f64) {
+        safe_dbg!(bl_path_arc_to(&mut self.0, center.x, center.y,
+            radius.x, radius.y, start as _, sweep as _, false));    //, force_move_to
     }
-    #[inline] pub fn elliptic_arc_to(&mut self, rp: &BLPoint, x_rot: f32, // svg_arc_to
+    #[inline] pub fn elliptic_arc_to(&mut self, rp: &BLPoint, x_rot: f64, // svg_arc_to
         large: bool, sweep: bool, pt: &BLPoint) {
         safe_dbg!(bl_path_elliptic_arc_to(&mut self.0,
             rp.x, rp.y, x_rot as _, large, sweep, pt.x, pt.y));
@@ -549,6 +553,9 @@ impl BLPath {
         safe_dbg!(bl_path_transform(&mut self.0, null(), mat));
     }
 
+    #[inline] pub fn reserve(&mut self, capacity: u32) {
+        safe_dbg!(bl_path_reserve(&mut self.0, capacity as _));
+    }
     #[inline] pub fn get_size(&self) -> u32 { unsafe { bl_path_get_size(&self.0) as _ } }
     #[inline] pub fn get_last_vertex(&self) -> Option<BLPoint> {
         let mut pt = BLPoint { x: 0.0, y: 0.0 };
@@ -594,12 +601,12 @@ impl BLLine {
     }
 }
 impl BLArc {
-    #[inline] pub fn new(c: &BLPoint, r: &BLPoint, start: f32, sweep: f32) -> Self {
+    #[inline] pub fn new(c: &BLPoint, r: &BLPoint, start: f64, sweep: f64) -> Self {
         Self { cx: c.x, cy: c.y, rx: r.x, ry: r.y, start: start as _, sweep: sweep as _ }
     }
 }
 impl BLCircle {
-    #[inline] pub fn new(c: &BLPoint, r: f32) -> Self { Self { cx: c.x, cy: c.y, r: r as _ } }
+    #[inline] pub fn new(c: &BLPoint, r: f64) -> Self { Self { cx: c.x, cy: c.y, r: r as _ } }
 }
 impl BLEllipse {
     #[inline] pub fn new(c: &BLPoint, r: &BLPoint) -> Self {
@@ -612,7 +619,7 @@ impl BLTriangle {
      }
 }
 impl BLRoundRect {
-    #[inline] pub fn new(rect: &BLRect, radius: f32) -> Self {
+    #[inline] pub fn new(rect: &BLRect, radius: f64) -> Self {
         Self { x: rect.x, y: rect.y, w: rect.w, h: rect.h, rx: radius as _, ry: radius as _ }
     }
 }
@@ -621,10 +628,8 @@ impl BLBox   { #[inline] pub fn new() -> Self { Self { x0: 0., y0: 0., x1: 0., y
 impl BLRect  { #[inline] pub fn new() -> Self { Self { x : 0., y : 0., w: 0., h: 0. } } }
 impl BLPoint {
     #[inline] pub fn new() -> Self { Self { x : 0., y : 0. } }
-    #[cfg(feature = "b2d_sfp")] #[inline] pub fn x(&self) -> f32 { self.x }
-    #[cfg(feature = "b2d_sfp")] #[inline] pub fn y(&self) -> f32 { self.y }
-    #[cfg(not(feature = "b2d_sfp"))] #[inline] pub fn x(&self) -> f64 { self.x }
-    #[cfg(not(feature = "b2d_sfp"))] #[inline] pub fn y(&self) -> f64 { self.y }
+    #[inline] pub fn x(&self) -> f64 { self.x as _ }
+    #[inline] pub fn y(&self) -> f64 { self.y as _ }
 }
 
 pub trait B2DGeometry { const GEOM_T: BLGeometryType; }
@@ -657,10 +662,10 @@ impl B2DGeometry for BLRoundRect {
 }
 
 impl From<(f64, f64)> for BLPoint {
-    #[inline] fn from((x, y): (f64, f64)) -> Self { Self { x, y } }
+    #[inline] fn from((x, y): (f64, f64)) -> Self { Self { x: x as _, y: y as _ } }
 }
-impl From<(f32, f32)> for BLPoint {
-    #[inline] fn from(v: (f32, f32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
+impl From<(F32, F32)> for BLPoint {
+    #[inline] fn from(v: (F32, F32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
 }
 impl From<(u32, u32)> for BLPoint {
     #[inline] fn from(v: (u32, u32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
@@ -668,7 +673,10 @@ impl From<(u32, u32)> for BLPoint {
 impl From<(i32, i32)> for BLPoint {
     #[inline] fn from(v: (i32, i32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
 }
-impl From<BLPoint> for (f32, f32) {
+impl From<BLPoint> for (f64, f64) {
+    #[inline] fn from(val: BLPoint) -> Self { (val.x as _, val.y as _) }
+}
+impl From<BLPoint> for (F32, F32) {
     #[inline] fn from(val: BLPoint) -> Self { (val.x as _, val.y as _) }
 }
 impl Clone for BLPoint { #[inline] fn clone(&self) -> Self { *self } }
@@ -680,16 +688,19 @@ impl From<(i32, i32)> for BLSizeI {
 impl From<(u32, u32)> for BLSizeI {
     #[inline] fn from(v: (u32, u32)) -> Self { Self { w: v.0 as _, h: v.1 as _ } }
 }
-impl From<(f32, f32)> for BLSize  {
-    #[inline] fn from(v: (f32, f32)) -> Self { Self { w: v.0 as _, h: v.1 as _ } }
+impl From<(f64, f64)> for BLSize  {
+    #[inline] fn from(v: (f64, f64)) -> Self { Self { w: v.0 as _, h: v.1 as _ } }
+}
+impl From<(F32, F32)> for BLSize  {
+    #[inline] fn from(v: (F32, F32)) -> Self { Self { w: v.0 as _, h: v.1 as _ } }
 }
 impl From<(f64, f64, f64, f64)> for BLBox {
     #[inline] fn from(v: (f64, f64, f64, f64)) -> Self {
-        Self { x0: v.0, y0: v.1, x1: v.2, y1: v.3 }
+        Self { x0: v.0 as _, y0: v.1 as _, x1: v.2 as _, y1: v.3 as _ }
     }
 }
-impl From<(f32, f32, f32, f32)> for BLBox {
-    #[inline] fn from(v: (f32, f32, f32, f32)) -> Self {
+impl From<(F32, F32, F32, F32)> for BLBox {
+    #[inline] fn from(v: (F32, F32, F32, F32)) -> Self {
         Self { x0: v.0 as _, y0: v.1 as _, x1: v.2 as _, y1: v.3 as _ }
     }
 }
@@ -700,10 +711,12 @@ impl From<(u32, u32, u32, u32)> for BLBox {
 }
 
 impl From<(f64, f64, f64, f64)> for BLRect {
-    #[inline] fn from(v: (f64, f64, f64, f64)) -> Self { Self { x: v.0, y: v.1, w: v.2, h: v.3 } }
+    #[inline] fn from(v: (f64, f64, f64, f64)) -> Self {
+        Self { x: v.0 as _, y: v.1 as _, w: v.2 as _, h: v.3 as _ }
+    }
 }
-impl From<(f32, f32, f32, f32)> for BLRect {
-    #[inline] fn from(v: (f32, f32, f32, f32)) -> Self {
+impl From<(F32, F32, F32, F32)> for BLRect {
+    #[inline] fn from(v: (F32, F32, F32, F32)) -> Self {
         Self { x: v.0 as _, y: v.1 as _, w: v.2 as _, h: v.3 as _ }
     }
 }
@@ -803,7 +816,7 @@ impl BLGradient {
             BLExtendMode::BL_EXTEND_MODE_PAD, null(), 0, null()));   Self(grd)
     }                                         //stops.as_ptr(), stops.len(),
 
-    #[inline] pub fn add_stop(&mut self, offset: f32, color: BLRgba32) {
+    #[inline] pub fn add_stop(&mut self, offset: f64, color: BLRgba32) {
         safe_dbg!(bl_gradient_add_stop_rgba32(&mut self.0, offset as _, color.value));
     }
 
@@ -830,12 +843,12 @@ impl BLLinearGradientValues {
     }
 }
 impl BLRadialGradientValues { // center/focal point
-    #[inline] pub fn new(cp: &BLPoint, fp: &BLPoint, r0: f32, r1: f32) -> Self {
+    #[inline] pub fn new(cp: &BLPoint, fp: &BLPoint, r0: f64, r1: f64) -> Self {
         Self { x0: cp.x, y0: cp.y, x1: fp.x, y1: fp.y, r0: r0 as _, r1: r1 as _ }
     }
 }
 impl BLConicGradientValues {
-    #[inline] pub fn new(pt: &BLPoint, angle: f32, repeat: f32) -> Self {
+    #[inline] pub fn new(pt: &BLPoint, angle: f64, repeat: f64) -> Self {
         Self { x0: pt.x, y0: pt.y, angle: angle as _, repeat: repeat as _ }
     }
 }

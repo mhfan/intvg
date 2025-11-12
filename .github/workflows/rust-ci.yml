@@ -71,7 +71,7 @@ jobs:
 
     - name: Benchmark
       run: |
-        cargo bench -F "evg_fixed" # "b2d_sfp" not yet supported in x86_64
+        CXX=g++ CC=gcc cargo bench -F "evg_fixed" # XXX: b2d_sfp failed to compile on X86
         cargo bench -F "evg,b2d" # --all-features
       #  sudo cargo flamegraph --bench engine_2d
 

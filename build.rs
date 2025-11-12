@@ -104,10 +104,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let module = "blend2d"; // "blend2d_bindings";
 
     let mut cc = cc::Build::new();
-    #[cfg(feature = "b2d_sfp")] { //println!("cargo:rustc-cfg=feature=\"b2d_sfp\"");
-        #[cfg(target_arch = "aarch64")] cc.flag("-mno-outline-atomics");
-        cc.define("BLEND2D_NO_DFP",  None).flag("-fsingle-precision-constant")
-          .define("BL_BUILD_NO_TLS", None).flag("-Wno-uninitialized").compiler("g++-13");
+    #[cfg(feature = "b2d_sfp")] {   //cc.compiler("g++");   // XXX: required
+        cc.define("BLEND2D_NO_DFP",  None).flag("-fsingle-precision-constant");
         bgen = bgen.clang_arg("-DBLEND2D_NO_DFP");
     }   // refer to blend2d/CMakeLists.txt
 
@@ -154,8 +152,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     } else /*if compiler.is_like_gnu() || compiler.is_like_clang() */{
-        cc//.flag("-Wall").flags("-Wextra").flag("-Wonversion") // ignore all warning flags
-            .flag("-fno-exceptions").flag("-fno-rtti").flag("-fvisibility=hidden")
+        #[cfg(not(feature = "b2d_sfp"))] cc.flags(["-Wconversion", "-Wdouble-promotion"]);
+        ["-Wduplicated-cond", "-Wduplicated-branches", "-Wlogical-op",
+         "-Wlogical-not-parentheses", "-Wrestrict", "-Wbidi-chars=any",
+        ].iter().for_each(|&f| { cc.flag_if_supported(f); });
+
+        cc  .flag("-fno-exceptions").flag("-fno-rtti").flag("-fvisibility=hidden")
             .flag("-fno-math-errno").flag("-fno-threadsafe-statics")
             .flag("-fmerge-all-constants").flag_if_supported("-ftree-vectorize")
             .flag_if_supported("-mllvm")  .flag_if_supported("--disable-loop-idiom-all");
@@ -211,6 +213,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .is_ok_and(|bl| bl).then(|| cc.flag(simd_flag)
                 .define("BL_TARGET_OPT_ASIMD_CRYPTO", None)
                 .define("BL_BUILD_OPT_ASIMD_CRYPTO", None));
+            if compiler.is_like_gnu() {
+                cc.define("BL_BUILD_NO_TLS", None).flag("-mno-outline-atomics");    // XXX:
+            }
         }
     }
 
@@ -219,7 +224,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //.define("ASMJIT_ABI_NAMESPACE=abi_bl", None)
         .files(glob::glob(&format!("{}/**/*.cpp",
             jit_src.display()))?.filter_map(Result::ok))
-        .files(glob::glob(&format!("{}/**/*.cpp",
+        .files(glob::glob(&format!("{}/**/*.cpp",   // XXX: filter out simd/opt extensions?
             b2d_src.display()))?.filter_map(|f|
                 f.ok().filter(|f| !f.to_string_lossy().contains("_test"))))
         .include(b2d_src.parent().unwrap()).include(jit_src.parent().unwrap())
