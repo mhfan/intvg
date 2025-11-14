@@ -211,21 +211,22 @@ trait PathBuilderExt {
 
 //  SVG arc to Canvas arc: https://github.com/nical/lyon/blob/main/crates/geom/src/arc.rs
 impl PathBuilderExt for skia::PathBuilder {
-    fn arc_to(&mut self, radius: &(f32, f32), rotation: f32,
-        large: bool, sweep: bool, target: &Point) {
-        let prev = self.last_point().unwrap();
+    fn arc_to(&mut self, radii: &(f32, f32), rotation: f32,
+        large: bool, sweep: bool, end: &Point) {
+        let prev = self.last_point().unwrap_or_default();
 
         let svg_arc = kurbo::SvgArc {
+               to: kurbo::Point::new(end.x as _, end.y as _),
              from: kurbo::Point::new(prev.x as _, prev.y as _),
-               to: kurbo::Point::new(target.x as _, target.y as _),
-            radii: kurbo::Vec2 ::new(radius.0 as _, radius.1 as _),
+            radii: kurbo::Vec2 ::new(radii.0 as _, radii.1 as _),
             x_rotation: (rotation as f64).to_radians(), large_arc: large, sweep,
         };
 
-        match kurbo::Arc::from_svg_arc(&svg_arc) {  None => self.line_to(target.x, target.y),
-            Some(arc) => arc.to_cubic_beziers(0.1, |p1, p2, p|
-                self.cubic_to(p1.x as _, p1.y as _, p2.x as _, p2.y as _, p.x as _, p.y as _)),
-        }
+        if let Some(arc) = kurbo::Arc::from_svg_arc(&svg_arc) {
+            arc.to_cubic_beziers(0.1, |p1, p2, end|
+                 self.cubic_to(p1.x as _, p1.y as _,
+                               p2.x as _, p2.y as _, end.x as _, end.y as _))
+        } else { self.line_to(end.x, end.y) }
     }
 }
 

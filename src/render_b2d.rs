@@ -37,8 +37,8 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
             match cmd { Command::EndOfDocument => (),
                 Command::FillPolyg(FillCMD { fill, coll }) => {
                     let mut iter = coll.iter();
-                    if let Some(pt) = iter.next() { path.move_to(&(*pt).into()) }
-                    iter.for_each(|pt| path.line_to(&(*pt).into()));  path.close();
+                    if let Some(&pt) = iter.next() { path.move_to(pt.into()) }
+                    iter.for_each(|&pt| path.line_to(pt.into()));  path.close();
                     ctx.fill_geometry_ext(&path, convert_style(self, fill).as_ref());
                 }
                 Command::FillRects(FillCMD { fill, coll }) => {
@@ -53,14 +53,14 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 }
                 Command::DrawLines(DrawCMD { line, lwidth, coll }) => {
                     coll.iter().for_each(|line| {
-                        path.move_to(&line.start.into()); path.line_to(&line.end.into());
+                        path.move_to(line.start.into()); path.line_to(line.end.into());
                     }); ctx.set_stroke_width(*lwidth as _);
                     ctx.stroke_geometry_ext(&path, convert_style(self, line).as_ref());
                 }
                 Command::DrawLoop (DrawCMD { line, lwidth, coll },
                     strip) => {     let mut iter = coll.iter();
-                    if let Some(pt) = iter.next() { path.move_to(&(*pt).into()) }
-                    iter.for_each(|pt| path.line_to(&(*pt).into()));
+                    if let Some(&pt) = iter.next() { path.move_to(pt.into()) }
+                    iter.for_each(|&pt| path.line_to(pt.into()));
 
                     if !*strip { path.close(); }    ctx.set_stroke_width(*lwidth as _);
                     ctx.stroke_geometry_ext(&path, convert_style(self, line).as_ref());
@@ -76,8 +76,8 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 Command::OutlinePolyg(fill, DrawCMD {
                     line, lwidth, coll }) => {
                     let mut iter = coll.iter();
-                    if let Some(pt) = iter.next() { path.move_to(&(*pt).into()) }
-                    iter.for_each(|pt| path.line_to(&(*pt).into()));  path.close();
+                    if let Some(&pt) = iter.next() { path.move_to(pt.into()) }
+                    iter.for_each(|&pt| path.line_to(pt.into()));  path.close();
 
                     ctx.set_stroke_width(*lwidth as _);
                     ctx.  fill_geometry_ext(&path, convert_style(self, fill).as_ref());
@@ -113,21 +113,21 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
 
 fn stroke_segment_path(seg: &Segment, ctx: &mut BLContext, style: &dyn B2DStyle) {
     let mut path = BLPath::new();
-    path.move_to(&seg.start.into());
+    path.move_to(seg.start.into());
 
     for cmd in &seg.cmds {
         if let Some(width) = cmd.lwidth {
             if 1 < path.get_size() {
                 let start = path.get_last_vertex().unwrap();
                 ctx.stroke_geometry_ext(&path, style);
-                path.reset(); path.move_to(&start);
+                path.reset(); path.move_to(start);
             }   ctx.set_stroke_width(width as _);
         }   process_segcmd(&mut path, &cmd.instr);
     }   ctx.stroke_geometry_ext(&path, style);
 }
 
 fn segment_to_path(seg: &Segment, path: &mut BLPath) -> bool {
-    path.move_to(&seg.start.into());
+    path.move_to(seg.start.into());
     let mut change_lw = false;
 
     for cmd in &seg.cmds {
@@ -138,24 +138,24 @@ fn segment_to_path(seg: &Segment, path: &mut BLPath) -> bool {
 
 fn process_segcmd(path: &mut BLPath, cmd: &SegInstr) {
     match cmd {     SegInstr::ClosePath => path.close(),
-        SegInstr::Line  { end } => path.line_to(&(*end).into()),
+        SegInstr::Line  { end } => path.line_to((*end).into()),
         SegInstr::HLine { x }     =>
-            path.line_to(&BLPoint { x: *x as _, y: path.get_last_vertex().unwrap().y }),
+            path.line_to((*x as _, path.get_last_vertex().unwrap().y).into()),
         SegInstr::VLine { y }     =>
-            path.line_to(&BLPoint { x: path.get_last_vertex().unwrap().x, y: *y as _ }),
+            path.line_to((path.get_last_vertex().unwrap().x, *y as _).into()),
 
         SegInstr::CubicBezier { ctrl, end } =>
-            path.cubic_to(&ctrl.0.into(), &ctrl.1.into(), &(*end).into()),
+            path.cubic_to(ctrl.0.into(), ctrl.1.into(), (*end).into()),
         SegInstr::ArcCircle  { large, sweep, radius, target } =>
-            path.elliptic_arc_to(&BLPoint { x: *radius as _, y: *radius as _ },
-                0.0, *large, *sweep, &(*target).into()),
+            path.elliptic_arc_to((*radius, *radius).into(),
+                0.0, *large, *sweep, (*target).into()),
 
         SegInstr::ArcEllipse { large, sweep, radius,
-            rotation, target } => path.elliptic_arc_to(&(*radius).into(),
-                *rotation as _, *large, *sweep, &(*target).into()),
+            rotation, target } => path.elliptic_arc_to((*radius).into(),
+                *rotation as _, *large, *sweep, (*target).into()),
 
         SegInstr::QuadBezier { ctrl, end } =>
-            path.quad_to(&(*ctrl).into(), &(*end).into()),
+            path.quad_to((*ctrl).into(), (*end).into()),
     }
 }
 
@@ -174,14 +174,14 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
 
         Style::LinearGradient { points, cindex } => {
             let mut linear = BLGradient::new(
-                &BLLinearGradientValues::new(&points.0.into(), &points.1.into()));
+                &BLLinearGradientValues::new(points.0.into(), points.1.into()));
             linear.add_stop(0.0, img.lookup_color(cindex.0).into());
             linear.add_stop(1.0, img.lookup_color(cindex.1).into());
             Box::new(linear)    //linear.scale(scale, scale);
         }
         Style::RadialGradient { points, cindex } => {
             let mut radial = BLGradient::new(&BLRadialGradientValues::new(
-                &points.0.into(), &points.0.into(),
+                points.0.into(), points.0.into(),
                 (points.1.x - points.0.x).hypot(points.1.y - points.0.y) as _, 1.));
             radial.add_stop(0.0, img.lookup_color(cindex.0).into());
             radial.add_stop(1.0, img.lookup_color(cindex.1).into());
