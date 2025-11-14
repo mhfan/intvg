@@ -135,20 +135,18 @@ fn process_segcmd(path: &VGPath, cmd: &SegInstr) {
     match cmd {     SegInstr::ClosePath => path.close(),
         SegInstr::Line  { end } => path.line_to((*end).into()),
         SegInstr::HLine { x }     =>
-            path.line_to(GF_Point2D { x: (*x).into(), y: path.last_point().unwrap().y }),
+            path.line_to(((*x).into(), path.last_point().unwrap().y).into()),
         SegInstr::VLine { y }     =>
-            path.line_to(GF_Point2D { x: path.last_point().unwrap().x, y: (*y).into() }),
+            path.line_to((path.last_point().unwrap().x, (*y).into()).into()),
 
         SegInstr::CubicBezier { ctrl, end } =>
             path.cubic_to(ctrl.0.into(), ctrl.1.into(), (*end).into()),
-        SegInstr::ArcCircle  { large, sweep, radius, target } =>
-            path.svg_arc_to(GF_Point2D { x: (*radius).into(), y: (*radius).into()},
-                0.into(), *large, *sweep, (*target).into()),
+        SegInstr::ArcCircle  { large, sweep, radius, end } =>
+            path.svg_arc_to((*radius, *radius).into(), 0.into(), *large, *sweep, (*end).into()),
 
-        SegInstr::ArcEllipse { large, sweep, radius,
-            rotation, target } => path.svg_arc_to(
-                GF_Point2D { x: radius.0.into(), y: radius.1.into() },
-                (*rotation).into(), *large, *sweep, (*target).into()),
+        SegInstr::ArcEllipse { large, sweep, radii,
+            rotation, end } => path.svg_arc_to((*radii).into(),
+                (*rotation).into(), *large, *sweep, (*end).into()),
 
         SegInstr::QuadBezier { ctrl, end } =>
             path.quad_to((*ctrl).into(), (*end).into()),
@@ -176,20 +174,18 @@ fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>, style: &Style
             sten    //sten.set_matrix(trfm);
         }
         Style::RadialGradient { points, cindex } => {
-            let radius = (points.1.x - points.0.x).hypot(points.1.y - points.0.y);
-            let radius = GF_Point2D { x: radius.into(), y: radius.into() };
-
             let sten = Stencil::new(GF_STENCIL_RADIAL_GRADIENT);
             sten.push_interpolation(0.into(), img.lookup_color(cindex.0).into());
             sten.push_interpolation(1.into(), img.lookup_color(cindex.1).into());
-            sten.set_radial(points.0.into(), points.0.into(), radius);
+            let radius = (points.1.x - points.0.x).hypot(points.1.y - points.0.y);
+            sten.set_radial(points.0.into(), points.0.into(), (radius, radius).into());
             sten    //sten.set_matrix(trfm);
         }
     }
 }
 
 impl From<Point> for GF_Point2D {
-    fn from(pt:  Point) -> Self { Self { x: pt.x.into(), y: pt.y.into() } }
+    fn from(pt: Point) -> Self { Self { x: pt.x.into(), y: pt.y.into() } }
 }
 
 /* impl From<tiny_skia::Transform> for GF_Matrix2D {

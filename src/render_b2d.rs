@@ -146,13 +146,13 @@ fn process_segcmd(path: &mut BLPath, cmd: &SegInstr) {
 
         SegInstr::CubicBezier { ctrl, end } =>
             path.cubic_to(ctrl.0.into(), ctrl.1.into(), (*end).into()),
-        SegInstr::ArcCircle  { large, sweep, radius, target } =>
+        SegInstr::ArcCircle  { large, sweep, radius, end } =>
             path.elliptic_arc_to((*radius, *radius).into(),
-                0.0, *large, *sweep, (*target).into()),
+                0.0, *large, *sweep, (*end).into()),
 
-        SegInstr::ArcEllipse { large, sweep, radius,
-            rotation, target } => path.elliptic_arc_to((*radius).into(),
-                *rotation as _, *large, *sweep, (*target).into()),
+        SegInstr::ArcEllipse { large, sweep, radii,
+            rotation, end } => path.elliptic_arc_to((*radii).into(),
+                *rotation as _, *large, *sweep, (*end).into()),
 
         SegInstr::QuadBezier { ctrl, end } =>
             path.quad_to((*ctrl).into(), (*end).into()),

@@ -279,15 +279,15 @@ fn process_segcmd(path: &Path2d, cmd: &SegInstr, last_point: &mut Point) {
                 end.x as _, end.y as _);    *last_point = *end;
         }
 
-        SegInstr::ArcCircle  { large, sweep, radius, target } => {
+        SegInstr::ArcCircle  { large, sweep, radius, end } => {
             wcns_arc_to(path, last_point, &(*radius, *radius), 0.0,
-                *large, *sweep, target);    *last_point = *target;
+                *large, *sweep, end);   *last_point = *end;
         }
 
-        SegInstr::ArcEllipse { large, sweep, radius,
-            rotation, target } => {
-            wcns_arc_to(path, last_point, radius, *rotation,
-                *large, *sweep, target);    *last_point = *target;
+        SegInstr::ArcEllipse { large, sweep, radii,
+            rotation, end } => {
+            wcns_arc_to(path, last_point, radii, *rotation,
+                *large, *sweep, end);   *last_point = *end;
         }
 
         SegInstr::QuadBezier { ctrl, end } => {
@@ -297,12 +297,12 @@ fn process_segcmd(path: &Path2d, cmd: &SegInstr, last_point: &mut Point) {
     }
 }
 
-fn wcns_arc_to(path: &Path2d, start: &Point, radius: &(f32, f32),
+fn wcns_arc_to(path: &Path2d, start: &Point, radii: &(f32, f32),
     rotation: f32, large: bool, sweep: bool, end: &Point) {
     let svg_arc = kurbo::SvgArc {
            to: kurbo::Point::new(end.x as _, end.y as _),
          from: kurbo::Point::new(start.x as _, start.y as _),
-        radii: kurbo::Vec2 ::new(radius.0 as _, radius.1 as _),
+        radii: kurbo::Vec2 ::new(radii.0 as _, radii.1 as _),
         x_rotation: (rotation as f64).to_radians(), large_arc: large, sweep,
     };
 

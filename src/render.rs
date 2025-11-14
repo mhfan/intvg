@@ -152,12 +152,11 @@ fn process_segcmd(pb: &mut skia::PathBuilder, cmd: &SegInstr) {
 
         SegInstr::CubicBezier { ctrl, end } =>
             pb.cubic_to(ctrl.0.x, ctrl.0.y, ctrl.1.x, ctrl.1.y, end.x, end.y),
-        SegInstr::ArcCircle  { large, sweep, radius, target } =>
-            pb.arc_to(&(*radius, *radius), 0.0, *large, *sweep, target),
+        SegInstr::ArcCircle  { large, sweep, radius, end } =>
+            pb.arc_to((*radius, *radius), 0.0, *large, *sweep, *end),
 
-        SegInstr::ArcEllipse { large, sweep, radius,
-                rotation, target } => pb.arc_to(radius,
-                *rotation, *large, *sweep, target),
+        SegInstr::ArcEllipse { large, sweep, radii, rotation, end } =>
+                pb.arc_to(*radii, *rotation, *large, *sweep, *end),
 
         SegInstr::QuadBezier { ctrl, end } =>
             pb.quad_to(ctrl.x, ctrl.y, end.x, end.y),
@@ -201,8 +200,8 @@ fn style_to_paint<'a, R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
 }
 
 trait PathBuilderExt {
-    fn arc_to(&mut self, radius: &(f32, f32), rotation: f32,
-        large: bool, sweep: bool, target: &Point);
+    fn arc_to(&mut self, radius: (f32, f32), rotation: f32,
+        large: bool, sweep: bool, target: Point);
 }   // https://github.com/RazrFalcon/resvg/blob/master/crates/usvg/src/parser/shapes.rs#L287
 
 //  https://medium.com/@Ovilia/if-you-wish-to-draw-an-arc-in-a-web-page-then-you-should-probably-use-canvas-or-svg-5a81194bbdf7
@@ -211,8 +210,8 @@ trait PathBuilderExt {
 
 //  SVG arc to Canvas arc: https://github.com/nical/lyon/blob/main/crates/geom/src/arc.rs
 impl PathBuilderExt for skia::PathBuilder {
-    fn arc_to(&mut self, radii: &(f32, f32), rotation: f32,
-        large: bool, sweep: bool, end: &Point) {
+    fn arc_to(&mut self, radii: (f32, f32), rotation: f32,
+        large: bool, sweep: bool, end: Point) {
         let prev = self.last_point().unwrap_or_default();
 
         let svg_arc = kurbo::SvgArc {

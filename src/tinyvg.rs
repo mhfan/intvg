@@ -262,12 +262,12 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
                 4 => {  let val = reader.read_u8()?;    SegInstr::ArcCircle {
                         large: 0 < val & 0x01, sweep: 0 < val & 0x02,
-                        radius:   self.read_unit(reader)?, target: self.read_point(reader)?
+                        radius:   self.read_unit(reader)?, end: self.read_point(reader)?
                 } }
                 5 => {  let val = reader.read_u8()?;    SegInstr::ArcEllipse {
                         large: 0 < val & 0x01, sweep: 0 < val & 0x02,
-                        radius:  (self.read_unit(reader)?, self.read_unit(reader)?),
-                        rotation: self.read_unit(reader)?, target: self.read_point(reader)?
+                        radii:   (self.read_unit(reader)?, self.read_unit(reader)?),
+                        rotation: self.read_unit(reader)?, end: self.read_point(reader)?
                 } }
 
                 6 => SegInstr::ClosePath,
@@ -450,17 +450,17 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
                     self.write_point(end, writer)
                 }
                 SegInstr::ArcCircle { large, sweep,
-                    radius, target } => {   write_tag(4)?;
+                    radius, end } => {   write_tag(4)?;
                     let mut val = 0u8;  if *large { val |= 0x01; }
                     if *sweep { val |= 0x02; }  writer.write_u8(val)?;
-                    self.write_unit(*radius, writer)?;      self.write_point(target, writer)
+                    self.write_unit(*radius, writer)?;      self.write_point(end, writer)
                 }
-                SegInstr::ArcEllipse { large, sweep, radius,
-                    rotation, target } => {     write_tag(5)?;
+                SegInstr::ArcEllipse { large, sweep, radii,
+                    rotation, end } => {     write_tag(5)?;
                     let mut val = 0u8;  if *large { val |= 0x01; }
                     if *sweep { val |= 0x02; }  writer.write_u8(val)?;
-                    self.write_unit(radius.0, writer)?;     self.write_unit(radius.1, writer)?;
-                    self.write_unit(*rotation, writer)?;    self.write_point(target, writer)
+                    self.write_unit(radii.0, writer)?;      self.write_unit(radii.1, writer)?;
+                    self.write_unit(*rotation, writer)?;    self.write_point(end, writer)
                 }
                 SegInstr::ClosePath => write_tag(6),
                 SegInstr::QuadBezier { ctrl, end } => {  write_tag(7)?;
@@ -712,11 +712,11 @@ pub struct Segment { pub start: Point, pub cmds: Vec<SegmentCommand>, }
 
 pub struct SegmentCommand { pub instr: SegInstr, pub lwidth: Option<Unit>, }
 
-pub enum SegInstr { //Move { start: Point },
+pub enum SegInstr { //Move { end: Point },
     Line { end: Point, }, HLine { x: Unit, }, VLine { y: Unit, },
     CubicBezier { ctrl: (Point, Point), end: Point, },
-    ArcCircle  { large: bool, sweep: bool, radius:  Unit, target: Point, },
-    ArcEllipse { large: bool, sweep: bool, radius: (Unit, Unit), rotation: Unit, target: Point, },
+    ArcCircle  { large: bool, sweep: bool, radius: Unit, end: Point, }, // merge with ellipse?
+    ArcEllipse { large: bool, sweep: bool, radii: (Unit, Unit), rotation: Unit, end: Point, },
     QuadBezier { ctrl: Point, end: Point, },     ClosePath,
 }
 
