@@ -357,7 +357,7 @@ impl BLImageData {
         Self { pixel_data: null_mut(), stride: 0, size: (0, 0).into(), format: 0, flags: 0 }
     }
     #[inline] pub fn pixels(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.pixel_data as *const u8,
+        unsafe { core::slice::from_raw_parts(self.pixel_data as *const u8,
             (self.stride as i32 * self.size.h) as usize) }
     }
     #[inline] pub fn stride(&self) -> i32 { self.stride as _ }
@@ -618,6 +618,37 @@ impl BLPath {
     #[inline] pub fn add_box(&mut self, bbox: &BLBox) {
         safe_dbg!(bl_path_add_box_d(&mut self.0, bbox,
             BLGeometryDirection::BL_GEOMETRY_DIRECTION_CW));
+    }
+
+    #[inline] pub fn iter(&self) -> BLPathIter<'_> { unsafe { BLPathIter {
+            cmd: bl_path_get_command_data(&self.0), idx: 0,
+            vtx: core::slice::from_raw_parts(bl_path_get_vertex_data(&self.0),
+                 bl_path_get_size(&self.0)),
+    } } }
+}
+
+pub enum BLPathItem {
+    QuadTo (BLPoint, BLPoint),
+    //ConicTo(BLPoint, f64, BLPoint),
+    CubicTo(BLPoint, BLPoint, BLPoint),
+    MoveTo (BLPoint),  LineTo(BLPoint), Close,
+}
+
+pub struct BLPathIter<'a> { cmd: *const u8, vtx: &'a [BLPoint], idx: u32, }
+impl<'a> Iterator for BLPathIter<'a> {  type Item = BLPathItem;
+    fn next(&mut self) -> Option<Self::Item> {
+        let idx =  self.idx as usize;
+        if  idx == self.vtx.len() { return None }   use {BLPathCmd::*, BLPathItem::*};
+        Some(match unsafe { mem::transmute::<u32, BLPathCmd>(*self.cmd.add(idx) as _) } {
+            BL_PATH_CMD_MOVE => { self.idx += 1; MoveTo(self.vtx[idx]) }
+            BL_PATH_CMD_ON   => { self.idx += 1; LineTo(self.vtx[idx]) }
+            BL_PATH_CMD_QUAD => { self.idx += 2; QuadTo(self.vtx[idx], self.vtx[idx + 1]) }
+            BL_PATH_CMD_CUBIC => { self.idx += 3;
+                CubicTo(self.vtx[idx], self.vtx[idx + 1], self.vtx[idx + 2]) }
+            //BL_PATH_CMD_CONIC => { self.idx += 3; ... }
+            BL_PATH_CMD_CLOSE => { self.idx += 1; Close }
+            _ => return None,
+        })
     }
 }
 
