@@ -30,7 +30,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
         ctx.set_stroke_join(BLStrokeJoin::BL_STROKE_JOIN_ROUND);
         ctx.set_stroke_caps(BLStrokeCap::BL_STROKE_CAP_ROUND);
         ctx.set_stroke_miter_limit(4.0);
-        ctx.scale(scale as _, scale as _);
+        ctx.scale((scale, scale).into());
         // XXX: does path needs to be transformed before fill/stroke?
 
         for cmd in &self.commands {
@@ -180,9 +180,9 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
             Box::new(linear)    //linear.scale(scale, scale);
         }
         Style::RadialGradient { points, cindex } => {
+            let radius = (points.1.x - points.0.x).hypot(points.1.y - points.0.y);
             let mut radial = BLGradient::new(&BLRadialGradientValues::new(
-                points.0.into(), points.0.into(),
-                (points.1.x - points.0.x).hypot(points.1.y - points.0.y) as _, 1.));
+                points.0.into(), points.1.into(), (0., radius as _).into()));
             radial.add_stop(0.0, img.lookup_color(cindex.0).into());
             radial.add_stop(1.0, img.lookup_color(cindex.1).into());
             Box::new(radial)    //radial.scale(scale, scale);
