@@ -239,7 +239,7 @@ impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
 
     #[inline] pub fn scale(&mut self, sl: BLVec2D) {
         safe_dbg!(bl_context_apply_transform_op(&mut self.0,
-            BLTransformOp::BL_TRANSFORM_OP_SCALE, BLArrayFP::new(&[sl.x, sl.y]).get_data()));
+            BLTransformOp::BL_TRANSFORM_OP_SCALE, BLArrayFP::new(&[sl.0, sl.1]).get_data()));
     }
     #[inline] pub fn translate(&mut self, pos: BLPoint) {
         safe_dbg!(bl_context_apply_transform_op(&mut self.0,
@@ -538,10 +538,10 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
         safe_dbg!(bl_matrix2d_set_translation(self, pos.x, pos.y));
     }
     #[inline] pub fn set_scaling(&mut self, sl: BLVec2D) {
-        safe_dbg!(bl_matrix2d_set_scaling(self, sl.x as _, sl.y as _));
+        safe_dbg!(bl_matrix2d_set_scaling(self, sl.0 as _, sl.1 as _));
     }
     #[inline] pub fn set_skewing(&mut self, sk: BLVec2D) {
-        safe_dbg!(bl_matrix2d_set_skewing(self, sk.x, sk.y));
+        safe_dbg!(bl_matrix2d_set_skewing(self, sk.0, sk.1));
     }
     #[inline] pub fn set_rotation(&mut self, angle: f64, origin: Option<BLPoint>) {
         let origin = origin.unwrap_or((0., 0.).into());
@@ -557,13 +557,13 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
     }
     #[inline] pub fn scale(&mut self, sl: BLVec2D) {
         safe_dbg!(bl_matrix2d_apply_op(self, BLTransformOp::BL_TRANSFORM_OP_SCALE,
-            BLArrayFP::new(&[sl.x, sl.y]).get_data()));
+            BLArrayFP::new(&[sl.0, sl.1]).get_data()));
         /* let mat = unsafe { &mut self.__bindgen_anon_1.__bindgen_anon_1 };
         mat.m00 *= sl.x; mat.m01 *= sl.x;   mat.m10 *= sl.y; mat.m11 *= sl.y; */
     }
     #[inline] pub fn skew(&mut self, sk: BLVec2D) {
         safe_dbg!(bl_matrix2d_apply_op(self, BLTransformOp::BL_TRANSFORM_OP_SKEW,
-            BLArrayFP::new(&[sk.x, sk.y]).get_data()));
+            BLArrayFP::new(&[sk.0, sk.1]).get_data()));
     }
     #[inline] pub fn rotate(&mut self, angle: f64, origin: Option<BLPoint>) {
         let origin = origin.unwrap_or((0., 0.).into());
@@ -584,14 +584,14 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
     }
     #[inline] pub fn post_scale(&mut self, sl: BLVec2D) {
         safe_dbg!(bl_matrix2d_apply_op(self, BLTransformOp::BL_TRANSFORM_OP_POST_SCALE,
-            BLArrayFP::new(&[sl.x, sl.y]).get_data()));
+            BLArrayFP::new(&[sl.0, sl.1]).get_data()));
         /* let mat = unsafe { &mut self.__bindgen_anon_1.__bindgen_anon_1 };
         mat.m00 *= sl.x; mat.m01 *= sl.y;   mat.m10 *= sl.x; mat.m11 *= sl.y;
         mat.m20 *= sl.x; mat.m21 *= sl.y; */
     }
     #[inline] pub fn post_skew(&mut self, sk: BLVec2D) {
         safe_dbg!(bl_matrix2d_apply_op(self, BLTransformOp::BL_TRANSFORM_OP_POST_SKEW,
-            BLArrayFP::new(&[sk.x, sk.y]).get_data()));
+            BLArrayFP::new(&[sk.0, sk.1]).get_data()));
     }
     #[inline] pub fn post_rotate(&mut self, angle: f64, origin: Option<BLPoint>) {
         let origin = origin.unwrap_or((0., 0.).into());
@@ -629,7 +629,7 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
 
     #[inline] pub fn get_scaling(&self) -> BLVec2D {
         let mat = unsafe {
-            &self.__bindgen_anon_1.__bindgen_anon_1 };  (mat.m00, mat.m10).into()
+            &self.__bindgen_anon_1.__bindgen_anon_1 };  (mat.m00, mat.m10)
     }
 
     #[inline] pub fn map_point(&self, pt: BLPoint) -> BLPoint {
@@ -641,7 +641,7 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
             pts.as_mut_ptr(), pts.as_ptr(), pts.len()));
     }
 }
-pub type BLVec2D = BLPoint;     // (f64, f64), BLSize/BLPoint
+pub type BLVec2D = (f64, f64);     // (f64, f64), BLSize/BLPoint
 
 pub struct BLPath(BLPathCore);  //  https://blend2d.com/doc/classBLPath.html
 impl Drop for BLPath { #[inline] fn drop(&mut self) {
@@ -667,12 +667,12 @@ impl BLPath {
     #[inline] pub fn arc_to(&mut self, center: BLPoint, radii: BLVec2D,
         start: f64, sweep: f64) {
         safe_dbg!(bl_path_arc_to(&mut self.0, center.x, center.y,
-            radii.x, radii.y, start as _, sweep as _, false));  //, force_move_to
+            radii.0, radii.1, start as _, sweep as _, false));  //, force_move_to
     }
     #[inline] pub fn elliptic_arc_to(&mut self, radii: BLVec2D,    // svg_arc_to
         x_rot: f64, large: bool, sweep: bool, end: BLPoint) {
         safe_dbg!(bl_path_elliptic_arc_to(&mut self.0,
-            radii.x, radii.y, x_rot as _, large, sweep, end.x, end.y));
+            radii.0, radii.1, x_rot as _, large, sweep, end.x, end.y));
         //  Adds an elliptic arc to the path that follows the SVG specification.
         //  https://www.w3.org/TR/SVG/paths.html#PathDataEllipticalArcCommands
     }
@@ -773,7 +773,7 @@ impl BLLine {
 }
 impl BLArc {
     #[inline] pub fn new(c: BLPoint, r: BLVec2D, start: f64, sweep: f64) -> Self {
-        Self { cx: c.x, cy: c.y, rx: r.x, ry: r.y, start: start as _, sweep: sweep as _ }
+        Self { cx: c.x, cy: c.y, rx: r.0, ry: r.1, start: start as _, sweep: sweep as _ }
     }
 }
 impl BLCircle {
@@ -781,7 +781,7 @@ impl BLCircle {
 }
 impl BLEllipse {
     #[inline] pub fn new(c: BLPoint, r: BLVec2D) -> Self {
-        Self { cx: c.x, cy: c.y, rx: r.x, ry: r.y }
+        Self { cx: c.x, cy: c.y, rx: r.0, ry: r.1 }
      }
 }
 impl BLTriangle {
@@ -1076,7 +1076,7 @@ impl BLLinearGradientValues {
 }
 impl BLRadialGradientValues { // center/focal point
     #[inline] pub fn new(cp: BLPoint, fp: BLPoint, radii: BLVec2D) -> Self {
-        Self { x0: cp.x, y0: cp.y, x1: fp.x, y1: fp.y, r0: radii.x as _, r1: radii.y as _ }
+        Self { x0: cp.x, y0: cp.y, x1: fp.x, y1: fp.y, r0: radii.0 as _, r1: radii.1 as _ }
     }
 }
 impl BLConicGradientValues {
@@ -1145,7 +1145,7 @@ impl std::error::Error  for BLErr {
         let mut ctx = BLContext::new(&mut img);     //ctx.clear_all();
 
         let mut radial = BLGradient::new(&BLRadialGradientValues::new(
-            (180, 180).into(), (180, 180).into(), (180.0, 0.).into()));
+            (180, 180).into(), (180, 180).into(), (180.0, 0.)));
         radial.add_stop(0.0, 0xFFFFFFFF.into());
         radial.add_stop(1.0, 0xFFFF6F3F.into());
 

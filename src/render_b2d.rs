@@ -30,7 +30,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
         ctx.set_stroke_join(BLStrokeJoin::BL_STROKE_JOIN_ROUND);
         ctx.set_stroke_caps(BLStrokeCap::BL_STROKE_CAP_ROUND);
         ctx.set_stroke_miter_limit(4.0);
-        ctx.scale((scale, scale).into());
+        ctx.scale((scale as _, scale as _));
         // XXX: does path needs to be transformed before fill/stroke?
 
         for cmd in &self.commands {
@@ -147,11 +147,11 @@ fn process_segcmd(path: &mut BLPath, cmd: &SegInstr) {
         SegInstr::CubicBezier { ctrl, end } =>
             path.cubic_to(ctrl.0.into(), ctrl.1.into(), (*end).into()),
         SegInstr::ArcCircle  { large, sweep, radius, end } =>
-            path.elliptic_arc_to((*radius, *radius).into(),
+            path.elliptic_arc_to((*radius as _, *radius as _),
                 0.0, *large, *sweep, (*end).into()),
 
         SegInstr::ArcEllipse { large, sweep, radii,
-            rotation, end } => path.elliptic_arc_to((*radii).into(),
+            rotation, end } => path.elliptic_arc_to((radii.0 as _, radii.1 as _),
                 *rotation as _, *large, *sweep, (*end).into()),
 
         SegInstr::QuadBezier { ctrl, end } =>
@@ -182,7 +182,7 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
         Style::RadialGradient { points, cindex } => {
             let radius = (points.1.x - points.0.x).hypot(points.1.y - points.0.y);
             let mut radial = BLGradient::new(&BLRadialGradientValues::new(
-                points.0.into(), points.1.into(), (0., radius as _).into()));
+                points.0.into(), points.1.into(), (0., radius as _)));
             radial.add_stop(0.0, img.lookup_color(cindex.0).into());
             radial.add_stop(1.0, img.lookup_color(cindex.1).into());
             Box::new(radial)    //radial.scale(scale, scale);
