@@ -178,7 +178,7 @@ fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>, style: &Style
             sten.push_interpolation(0.into(), img.lookup_color(cindex.0).into());
             sten.push_interpolation(1.into(), img.lookup_color(cindex.1).into());
             let radius = (points.1.x - points.0.x).hypot(points.1.y - points.0.y);
-            sten.set_radial(points.0.into(), points.0.into(), (radius, radius).into());
+            sten.set_radial(points.0.into(), points.1.into(), (radius, radius).into());
             sten    //sten.set_matrix(trfm);
         }
     }
