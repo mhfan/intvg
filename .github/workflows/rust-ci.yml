@@ -48,7 +48,6 @@ jobs:
 
     - name: Checkout repository
       uses: actions/checkout@v4
-    - run: 3rdparty/layout.sh
 
     - uses: actions/cache@v4
       with:
@@ -66,7 +65,7 @@ jobs:
       env: # DYLD_FALLBACK_LIBRARY_PATH (macOS), PATH (Windows) # XXX:
         LD_LIBRARY_PATH: ${{github.workspace}}/3rdparty/amanithvg/lib/linux/x86_64/sre/standalone
       run: |
-        cargo t -F "evg,b2d,ftg,ovg,ugl" -- --nocapture #cargo nextest r
+        cargo t -F "evg,b2d,ftg,ovg,ugl" -- --no-capture #cargo nextest r
         cargo binstall -y dioxus-cli && cd wcnvs && dx build
 
     - name: Benchmark

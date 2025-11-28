@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rustc-env=BUILD_GIT_HASH={}", String::from_utf8(output.stdout)?);
     println!("cargo:rerun-if-changed={}", PathBuf::from(".git/index").display());
 
-    //Command::new(PathBuf::from("3rdparty/layout.sh")).status()?;
+    Command::new(PathBuf::from("3rdparty/layout.sh")).status()?;
     #[allow(unused)] let odir = PathBuf::from("target/bindings");
     std::fs::create_dir_all(&odir)?;    // env::var("OUT_DIR")?
 
