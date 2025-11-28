@@ -5,8 +5,8 @@
  * Copyright (c) 2023 M.H.Fan, All rights reserved.             *
  ****************************************************************/
 
-#![allow(non_upper_case_globals)] #![allow(clippy::enum_variant_names)]
-#![allow(unused)] #![allow(clippy::new_without_default)]
+#![allow(unused, non_upper_case_globals,
+    clippy::new_without_default, clippy::enum_variant_names)]
 
 //pub mod blend2d  {    // https://blend2d.com
 use std::ffi::CString;
@@ -494,18 +494,28 @@ impl Drop for BLArrayFP {
 }
 impl BLArrayFP {
     #[inline] pub fn new(data: &[f64]) -> Self { let mut array = object_init();
-        safe_dbg!(bl_array_reserve(&mut array, data.len()));
-        //safe_dbg!(bl_array_assign_data(&mut array, data.as_ptr() as _, data.len()));
-        //safe_dbg!(bl_array_append_data(&mut array, data_ptr, data.len()));
-
-        if cfg!(feature = "b2d_sfp") {  // mem::size_of::<f64>() == 4
+        if cfg!(feature = "b2d_sfp") {
             safe_dbg!(bl_array_init(&mut array, BLObjectType::BL_OBJECT_TYPE_ARRAY_FLOAT32));
-            data.iter().for_each(|v| {
-                safe_dbg!(bl_array_append_f32(&mut array, *v as _)); });
+            safe_dbg!(bl_array_reserve(&mut array, data.len()));
+
+            if mem::size_of::<f64>() == 4 {     // re-defined f64 = f32
+                safe_dbg!(bl_array_assign_data(&mut array,
+                    data.as_ptr() as _, data.len()));
+            } else {
+                data.iter().for_each(|v| {
+                    safe_dbg!(bl_array_append_f32(&mut array, *v as _)); });
+            }
         } else {
             safe_dbg!(bl_array_init(&mut array, BLObjectType::BL_OBJECT_TYPE_ARRAY_FLOAT64));
-            data.iter().for_each(|v| {
-                safe_dbg!(bl_array_append_f64(&mut array, *v as _)); });
+            safe_dbg!(bl_array_reserve(&mut array, data.len()));
+
+            if mem::size_of::<f64>() == 8 {
+                safe_dbg!(bl_array_assign_data(&mut array,
+                    data.as_ptr() as _, data.len()));
+            } else {
+                data.iter().for_each(|v| {
+                    safe_dbg!(bl_array_append_f64(&mut array, *v as _)); });
+            }
         }   Self(array)
     }
 

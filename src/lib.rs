@@ -10,7 +10,7 @@ pub mod convert;
 #[cfg(feature = "b2d")] pub mod render_b2d;
 
 #[cfg(feature = "ugl")] pub mod microgl {   pub use ugl_ffi::*;
-     #[allow(non_camel_case_types)] #[allow(non_upper_case_globals)] //#[allow(non_snake_case)]
+    #[allow(non_camel_case_types, non_upper_case_globals)] // non_snake_case,
     mod ugl_ffi { include!("../target/bindings/microgl.rs"); }
 }
 
@@ -21,7 +21,7 @@ pub mod convert;
     https://gitlab.freedesktop.org/freetype/freetype/-/blob/master/src/raster/ftraster.c */
 
 #[cfg(feature = "ftg")] pub mod ftgrays  {  pub use ftg_ffi::*; // XXX:
-    #[allow(non_snake_case)] #[allow(non_camel_case_types)] //#[allow(non_upper_case_globals)]
+    #[allow(non_snake_case, non_camel_case_types)] // non_upper_case_globals,
     mod ftg_ffi { include!("../target/bindings/ftgrays.rs"); }  // ftg_bindings.rs
 
     impl From<(FT_Pos, FT_Pos)> for FT_Vector {

@@ -5,8 +5,7 @@
  * Copyright (c) 2023 M.H.Fan, All rights reserved.             *
  ****************************************************************/
 
-#![allow(non_snake_case)] #![allow(non_camel_case_types)]
-#![allow(unused)] #![allow(clippy::too_many_arguments)]
+#![allow(unused, non_snake_case, non_camel_case_types, clippy::too_many_arguments)]
 
 //pub mod openvg {   // https://www.amanithvg.com // avg_bindings.rs
 mod ovg_ffi { include!("../target/bindings/openvg.rs"); }   use ovg_ffi::*;

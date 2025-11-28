@@ -6,8 +6,8 @@
  ****************************************************************/
 
 //pub mod gpac_evg {    // https://github.com/gpac/gpac/tree/master/src/evg/
-#[allow(non_snake_case)] #[allow(non_camel_case_types)] //#[allow(non_upper_case_globals)]
-#[allow(unused)] //#[allow(clippy::approx_constant)] #[allow(clippy::useless_transmute)]
+#[allow(unused, non_snake_case, non_camel_case_types)]
+    //non_upper_case_globals, //clippy::approx_constant, clippy::useless_transmute,
 mod evg_ffi { include!("../target/bindings/gpac_evg.rs"); }     use evg_ffi::*;
 pub use evg_ffi::{GF_Point2D, GF_Rect, GF_Color, GF_Matrix2D, GF_PenSettings, GF_StencilType};
 
