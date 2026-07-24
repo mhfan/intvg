@@ -16,14 +16,20 @@ fn app() -> Element {
         let tvg = if file.ends_with(".svg") {
             let mut usvg_opts = usvg::Options::default();
             usvg_opts.fontdb_mut().load_system_fonts();
-            let tree = usvg::Tree::from_data(data, &usvg_opts).unwrap();
+            let tree = match usvg::Tree::from_data(data, &usvg_opts) {
+                Err(err) => { eprintln!("Fail to parse {file}: {err}"); return }
+                Ok(tree) => tree,
+            };
 
             let now = Instant::now();
             render::render_svg(&tree, ctx2d, cw, ch);
             draw_perf(ctx2d, 1. / now.elapsed().as_secs_f32());
 
             return //intvg::convert::Convert::from_usvg(&data).unwrap()
-        } else { TVGBuf::load_data(&mut std::io::Cursor::new(data)).unwrap() };
+        } else { match TVGBuf::load_data(&mut std::io::Cursor::new(data)) {
+            Err(err) => { eprintln!("Fail to parse {file}: {err}"); return }
+            Ok(tvg) => tvg,
+        } };
         //tracing::info!("picked file: {} with {} bytes\nTinyVG: {:?}",
         //    file, data.len(), tvg.header);  // evt.value()
 
@@ -132,9 +138,11 @@ fn app() -> Element {
                 let canvas: HtmlCanvasElement = web_sys::window().unwrap().document().unwrap()
                     .get_element_by_id("canvas").unwrap().dyn_into().unwrap();
                 let ctx2d = canvas.get_context("2d").unwrap().unwrap().dyn_into().unwrap();
-
-                let fd = &evt.files()[0];   let file = fd.name();
-                let data = fd.read_bytes().await.unwrap().to_vec();
+                let files = evt.files();    let Some(fd) = files.first() else { return };
+                let file = fd.name();
+                let Ok(data) = fd.read_bytes().await else {
+                    eprintln!("Fail to read {file}"); return;
+                };  let data = data.to_vec();
                 draw_canvas(&ctx2d, &data, &file, canvas.width(), canvas.height());
                 file_data.set(Some((data, file)));
             }
@@ -163,4 +171,3 @@ fn app() -> Element {
         }
     }
 } */
-

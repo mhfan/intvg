@@ -31,7 +31,7 @@ impl<R: io::Read, W: io::Write> Convert for TinyVG<R, W> {
         // XXX: still need a traversely check CoordinateRange by a null writer?
 
         convert_nodes(&mut tvg, tree.root(), &usvg::Transform::identity());
-        println!("{:?}, {} colors, {} cmds/paths", &tvg.header,
+        println!("{:?}, {} colors, {} cmds/paths", tvg.header,
             tvg.color_table.len(), tvg.commands.len());     Ok(tvg)
     }
 }
@@ -136,19 +136,20 @@ fn convert_paint<R: io::Read, W: io::Write>(tvg: &mut TinyVG<R, W>,
                 g: color.green, b: color.blue, a: opacity.to_u8() })))
         }
         usvg::Paint::LinearGradient(grad) => {
+            let (first, last) = (grad.stops().first()?, grad.stops().last()?);
             let p0 = (grad.x1(), grad.y1()).into();
             let p1 = (grad.x2(), grad.y2()).into();
-            let c0 = tvg.push_color(get_color(&grad.stops()[0]));
-            let c1 = tvg.push_color(get_color(&grad.stops()[1]));
+            let c0 = tvg.push_color(get_color(first));
+            let c1 = tvg.push_color(get_color(last));
             Some(Style::LinearGradient { points: (p0, p1), cindex: (c0, c1) })
         }
         usvg::Paint::RadialGradient(grad) => {
+            let (first, last) = (grad.stops().first()?, grad.stops().last()?);
             let p0 = (grad.fx(), grad.fy()).into(); // focus/start, center/end
             let p1 = (grad.cx(), grad.cy() + grad.r().get()).into();
-            let c0 = tvg.push_color(get_color(&grad.stops()[0]));
-            let c1 = tvg.push_color(get_color(&grad.stops()[1]));
+            let c0 = tvg.push_color(get_color(first));
+            let c1 = tvg.push_color(get_color(last));
             Some(Style::RadialGradient { points: (p0, p1), cindex: (c0, c1) })
         }
     }
 }
-

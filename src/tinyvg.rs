@@ -96,7 +96,10 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
             //_reader: PhantomData, _writer: PhantomData,
     } }
 
-    pub fn lookup_color(&self, idx: VarUInt) -> RGBA8888 { self.color_table[idx as usize] }
+    pub fn lookup_color(&self, idx: VarUInt) -> RGBA8888 {
+        debug_assert!((idx as usize) < self.color_table.len(), "invalid color index: {idx}");
+        self.color_table[idx as usize]
+    }
     pub fn push_color(&mut self, color: RGBA8888) -> VarUInt {
         if let Some(idx) = self.color_table.iter().position(|c|
             c.r == color.r && c.g == color.g && c.b == color.b && c.a == color.a) { idx as _
@@ -130,10 +133,17 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
                 msg: "unsupported color encoding" })
         };  assert!(tvgd.commands.is_empty() && tvgd.color_table.is_empty());
 
-        tvgd.header.width  = (tvgd.read_range)(reader)? as _;
-        tvgd.header.height = (tvgd.read_range)(reader)? as _;
-        let color_count = reader.read_varuint()?;
-        tvgd.color_table.reserve_exact(color_count as _);
+        let (width, height) = ((tvgd.read_range)(reader)?, (tvgd.read_range)(reader)?);
+        // The spec uses zero to encode the coordinate range's maximum dimension.
+        // That can be 2^32 in enhanced mode, which Header and the renderers cannot
+        // represent safely. Negative values may come from interpreting malformed
+        // unsigned dimensions as signed Units.
+        if width <= 0 || height <= 0 { return Err(TVGError { kind: ErrorKind::OutOfRange,
+            msg: "zero or negative image dimension is unsupported"
+        }) }
+        (tvgd.header.width, tvgd.header.height) = (width as _, height as _);
+        let  color_count = reader.read_varuint()?;
+        tvgd.color_table.reserve(color_count.min(4096) as _);
 
         tvgd.header.color_fmt = ColorEncoding::RGBA8888;
         match (val >> 4) & 0x03 {   // XXX: unified to RGBA8888
@@ -164,7 +174,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
             }   tvgd.commands.push(cmd);
         }
 
-        println!("{:?}, {} colors, {} cmds/paths", &tvgd.header,
+        println!("{:?}, {} colors, {} cmds/paths", tvgd.header,
             tvgd.color_table.len(), tvgd.commands.len());   Ok(tvgd)
     }
 
@@ -362,6 +372,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
                 self.write_fillcmd(2, cmd, writer, Self::write_rect),
 
             Command::FillPath(cmd) => {
+                debug_assert!(!cmd.coll.is_empty());
                 writer.write_u8((cmd.fill.to_u8() << 6) | 3)?;
                 writer.write_varuint(cmd.coll.len() as u32 - 1)?;
                 self.write_style(&cmd.fill, writer)?;
@@ -375,6 +386,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
                 self.write_drawcmd(5, cmd, writer, Self::write_point) },
 
             Command::DrawPath(cmd) => {
+                debug_assert!(!cmd.coll.is_empty());
                 writer.write_u8((cmd.line.to_u8() << 6) | 7)?;
                 writer.write_varuint(cmd.coll.len() as u32 - 1)?;
                 self.write_style(&cmd.line, writer)?;
@@ -388,9 +400,8 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
                 self.write_outline(9, fill, cmd, writer, Self::write_rect),
 
             Command::OutlinePath (fill, cmd) => {
+                debug_assert!((1..=1 << 6).contains(&cmd.coll.len()));
                 writer.write_u8( (fill.to_u8() << 6) | 10)?;
-                if (1 << 6) < cmd.coll.len() { return Err(TVGError {
-                    kind: ErrorKind::OutOfRange, msg: "outline path segment" }) }
                 writer.write_u8((cmd.line.to_u8() << 6) | (cmd.coll.len() as u8 - 1))?;
                 self.write_style( fill, writer)?;       self.write_style(&cmd.line, writer)?;
                 self.write_unit(cmd.lwidth, writer)?;   self.write_path (&cmd.coll, writer)
@@ -400,6 +411,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
     fn write_fillcmd<T>(&self, idx: u8, cmd: &FillCMD<T>, writer: &mut W,
         write_fn: impl Fn(&Self, &T, &mut W) -> Result<()>) -> Result<()> {
+        debug_assert!(!cmd.coll.is_empty());
         writer.write_u8((cmd.fill.to_u8() << 6) | idx)?;
         writer.write_varuint(cmd.coll.len() as u32 - 1)?;
         self.write_style(&cmd.fill, writer)?;
@@ -408,6 +420,7 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
     fn write_drawcmd<T>(&self, idx: u8, cmd: &DrawCMD<T>, writer: &mut W,
         write_fn: impl Fn(&Self, &T, &mut W) -> Result<()>) -> Result<()> {
+        debug_assert!(!cmd.coll.is_empty());
         writer.write_u8((cmd.line.to_u8() << 6) | idx)?;
         writer.write_varuint(cmd.coll.len() as u32 - 1)?;
         self.write_style(&cmd.line, writer)?;   self.write_unit(cmd.lwidth, writer)?;
@@ -416,16 +429,15 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
 
     fn write_outline<T>(&self, idx: u8, fill: &Style, cmd: &DrawCMD<T>, writer: &mut W,
         write_fn: impl Fn(&Self, &T, &mut W) -> Result<()>) -> Result<()> {
+        debug_assert!((1..=1 << 6).contains(&cmd.coll.len()));
         writer.write_u8((fill.to_u8() << 6) | idx)?;
-        if (1 << 6) < cmd.coll.len() { return Err(TVGError {
-            kind: ErrorKind::OutOfRange, msg: "outline path segment" }) }
         writer.write_u8((cmd.line.to_u8() << 6) | (cmd.coll.len() as u8 - 1))?;
         self.write_style(fill, writer)?;        self.write_style(&cmd.line, writer)?;
         self.write_unit(cmd.lwidth, writer)?;
         cmd.coll.iter().try_for_each(|elem| write_fn(self, elem, writer))
     }
 
-    fn write_path(&self, coll: &Vec<Segment>, writer: &mut W) -> Result<()> {
+    fn write_path(&self, coll: &[Segment], writer: &mut W) -> Result<()> {
         for seg in coll { writer.write_varuint(seg.cmds.len() as u32 - 1)? }
         coll.iter().try_for_each(|seg| self.write_segment(seg, writer))
     }
@@ -514,7 +526,8 @@ impl<R: io::Read, W: io::Write> TinyVG<R, W> { #[allow(clippy::new_without_defau
         Result<()> { Ok(writer.write_i32_le(val)?) }
 
     fn write_unit(&self, val: Unit, writer: &mut W)-> Result<()> {
-        (self.write_range)(writer, (val * (1u32 << self.header.scale) as f32 + 0.5) as i32)
+        let scaled = val * (1u32 << self.header.scale) as f32;
+        (self.write_range)(writer, scaled.round() as i32)
     }
 }
 
@@ -586,11 +599,15 @@ trait TVGRead: io::Read  {
         let mut buf = [0; 4]; self.read_exact(&mut buf)?; Ok(f32::from_le_bytes(buf)) }
 
     fn  read_varuint(&mut self) -> Result<VarUInt> {
-        let mut val = 0u32;
-        for cnt in 0..5 { // (0..5).map(|x| x * 7)
-            let tmp = self.read_u8()?;
-            val |= ((tmp & 0x7F) as u32) << (7 * cnt);
-            if tmp < 0x80 { return Ok(val); }
+        let (mut val, mut cnt) = (0u32, 0);
+        while cnt < core::mem::size_of::<VarUInt>() * 8 {
+            let byte = self.read_u8()?;
+            /* if cnt == 28 && byte & 0xF0 != 0 { return Err(TVGError {
+                msg: "Invalid VarUInt encoding; fifth byte exceeds 32 bits",
+                kind: ErrorKind::InvalidData(byte),
+            }) } */
+            val |= ((byte & 0x7F) as u32)    << cnt;
+            if  byte < 0x80 { return Ok(val) }  cnt += 7;
         }
 
         Err(TVGError { kind: ErrorKind::InvalidData(val as _),
@@ -720,5 +737,25 @@ pub enum SegInstr { //Move { end: Point },
     QuadBezier { ctrl: Point, end: Point, },     ClosePath,
 }
 
-//}
+#[cfg(test)] mod tests { use super::*;
+    type TestTVG = TinyVG<io::Cursor<Vec<u8>>, io::Cursor<Vec<u8>>>;
 
+    #[test] fn rejects_unsupported_image_dimensions() {
+        for width in [[0, 0], [0xff, 0xff]] {
+            let mut input = io::Cursor::new(vec![
+                0x72, 0x56, 1, 0, width[0], width[1], 1, 0,
+            ]);
+            assert!(TestTVG::load_data(&mut input).is_err());
+        }
+    }
+
+    #[test] fn rounds_negative_units_to_nearest_integer() {
+        let image = TestTVG::new();
+        let mut output = io::Cursor::new(vec![]);
+        image.write_unit(-1.6, &mut output).unwrap();
+        output.set_position(0);
+        assert_eq!(TestTVG::read_default(&mut output).unwrap(), -2);
+    }
+}
+
+//}

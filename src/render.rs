@@ -17,12 +17,6 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
             line_cap: skia::LineCap::Round, ..Default::default() };
         let err_msg = "Fail to build path";
 
-        #[allow(non_local_definitions)] impl From<Rect> for skia::Rect {
-            //fn from(r: Rect) -> Self { unsafe { std::mem::transmute(r) } }
-            //fn from(r: Rect) -> Self { skia::Rect::from_ltrb(r.l, r.t, r.r, r.b).unwrap() }
-            fn from(r: Rect) -> Self { skia::Rect::from_xywh(r.x, r.y, r.w, r.h).unwrap() }
-        }
-
         let fillrule = skia::FillRule::Winding;
         for cmd in &self.commands {
             let mut pb = skia::PathBuilder::new();
@@ -37,7 +31,8 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                         &style_to_paint(self, fill, trfm)?, fillrule, trfm, None);
                 }
                 Command::FillRects(FillCMD { fill, coll }) => {
-                    coll.iter().for_each(|rect| pb.push_rect((*rect).into()));
+                    for rect in coll { pb.push_rect(skia::Rect::from_xywh(
+                        rect.x, rect.y, rect.w, rect.h).ok_or("Invalid rectangle")?); }
                     pixmap.fill_path(&pb.finish().ok_or(err_msg)?,
                         &style_to_paint(self, fill, trfm)?, fillrule, trfm, None);
                 }
@@ -90,7 +85,8 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     let pline = style_to_paint(self, line, trfm)?;
                     stroke.width = *lwidth;
 
-                    coll.iter().for_each(|rect| pb.push_rect((*rect).into()));
+                    for rect in coll { pb.push_rect(skia::Rect::from_xywh(
+                        rect.x, rect.y, rect.w, rect.h).ok_or("Invalid rectangle")?); }
                     let path = pb.finish().ok_or(err_msg)?;
 
                     pixmap.  fill_path(&path, &paint, fillrule, trfm, None);
@@ -255,4 +251,3 @@ const sRGB_gamma: f32 = 2.2;
 #[inline] fn linear2gamma(v: f32) ->  u8 { (255.0 * mapToGamma(v)) as _ }
 #[inline] fn gamma2linear(v:  u8) -> f32 { mapToLinear(v as f32 / 255.0) }
 #[inline] fn lerp(a: f32, b: f32, f: f32) -> f32 { a + (b - a) * f } */
-

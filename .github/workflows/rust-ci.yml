@@ -12,6 +12,13 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -19,6 +26,7 @@ jobs:
   testbench:
     #name: Build Rust Project
     runs-on: ubuntu-latest  # https://github.com/actions/virtual-environments
+    timeout-minutes: 15
 
     #strategy:
     #  matrix:
@@ -47,17 +55,8 @@ jobs:
     #  uses: dtolnay/rust-toolchain@stable
 
     - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      uses: actions/checkout@v6
+    - uses: Swatinem/rust-cache@v2  # should be after rustup
 
     #- uses: taiki-e/install-action@nextest
     - uses: cargo-bins/cargo-binstall@main
@@ -66,7 +65,7 @@ jobs:
         LD_LIBRARY_PATH: ${{github.workspace}}/3rdparty/amanithvg/lib/linux/x86_64/sre/standalone
       run: |
         cargo t -F "evg,b2d,ftg,ovg,ugl" -- --no-capture #cargo nextest r
-        cargo binstall -y dioxus-cli && cd wcnvs && dx build
+        cargo binstall -y dioxus-cli@0.7 && cd wcnvs && dx build
 
     - name: Benchmark
       run: |
@@ -81,13 +80,14 @@ jobs:
 
   coverage:   # https://github.com/xd009642/tarpaulin
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     #container:
     #  image: xd009642/tarpaulin:develop-nightly
     #  options: --security-opt seccomp=unconfined
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - run: rustup toolchain install nightly --profile minimal --component llvm-tools
     - uses: Swatinem/rust-cache@v2  # should be after rustup
@@ -108,10 +108,10 @@ jobs:
       #  run-types: 'Tests,Doctests'
 
     - name: Upload to codecov.io
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         token: ${{secrets.CODECOV_TOKEN}}  # not required for public repos
-      #  fail_ci_if_error: true
+        #fail_ci_if_error: true
         files: lcov.info
 
     #- name: Archive code coverage results

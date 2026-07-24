@@ -10,7 +10,7 @@ edition = "2021"
 [dependencies]
 dioxus = { version = "0.7" } #, features = [ "fullstack", "router" ]
 
-web-sys = { version = "=0.3.78", features = [ 'Window', 'Document', 'HtmlCanvasElement',
+web-sys = { version = "0.3", features = [ 'Window', 'Document', 'HtmlCanvasElement',
     'CanvasRenderingContext2d', 'Path2d', 'CanvasGradient', 'CanvasWindingRule',
     'ResizeObserver', 'ResizeObserverEntry', #'ResizeObserverOptions',
 ] }

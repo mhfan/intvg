@@ -191,6 +191,7 @@ pub struct Pixmap { pub data: Vec<u8>, pub width: u32, pub height: u32, }
 
 impl Pixmap {
     #[inline] pub fn new(width: u32, height: u32) -> Self {
+        debug_assert!(width.checked_mul(height).and_then(|v| v.checked_mul(4)).is_some());
         Self { width, height, data: vec![0; (width * height * 4) as _] }
     }
 
@@ -238,4 +239,3 @@ impl Pixmap {
         pixm.save_png("target/demo_evg.png").unwrap();
     }
 }
-

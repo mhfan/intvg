@@ -21,7 +21,7 @@ pub use b2d_ffi::{BLFormat, BLPoint, BLMatrix2D, BLImageData, BLRgba, BLRgba64,
 #[cfg(feature = "b2d_sfp")] type F32 = core::primitive::f64; // XXX: API wrapper differ in f32
 #[cfg(not(feature = "b2d_sfp"))] type F32 = f32;
 
-#[allow(non_camel_case_types)] //#[allow(non_upper_case_globals)]     // blend2d_bindings
+#[allow(non_camel_case_types, non_snake_case)] // blend2d_bindings
 mod b2d_ffi { include!("../target/bindings/blend2d.rs"); }  use b2d_ffi::*;
 // concat!(env!("OUT_DIR"), "/blend2d.rs")  // BGEN_DIR
 
@@ -1199,4 +1199,3 @@ impl std::error::Error  for BLErr {
         //BLContext::show_rtinfo();
     }
 }
-

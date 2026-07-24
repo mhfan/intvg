@@ -1,5 +1,6 @@
 
-use std::{env, path::{Path, PathBuf}, process::Command};
+use std::{path::{Path, PathBuf}, process::Command};
+#[cfg(any(feature = "b2d", feature = "ovg"))] use std::env;
 
 //  https://doc.rust-lang.org/stable/cargo/reference/build-scripts.html
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -14,7 +15,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rustc-env=BUILD_GIT_HASH={}", String::from_utf8(output.stdout)?);
     println!("cargo:rerun-if-changed={}", PathBuf::from(".git/index").display());
 
-    Command::new(PathBuf::from("3rdparty/layout.sh")).status()?;
+    let status = Command::new(PathBuf::from("3rdparty/layout.sh")).status()?;
+    if !status.success() { return Err("3rdparty/layout.sh failed".into()) }
     #[allow(unused)] let odir = PathBuf::from("target/bindings");
     std::fs::create_dir_all(&odir)?;    // env::var("OUT_DIR")?
 
@@ -163,29 +165,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .flag_if_supported("-mllvm")  .flag_if_supported("--disable-loop-idiom-all");
 
         if cfg!(not(target_vendor = "apple")) { cc.flag("-fno-semantic-interposition"); }
-        if env::var("CARGO_CFG_TARGET_OS")?.as_str() == "ios" { //cfg!(target_os = "ios")
+        if env::var("CARGO_CFG_TARGET_OS")?.as_str() != "ios" { //cfg!(not(target_os = "ios"))
             cc  .flag("-fno-trapping-math").flag("-fno-finite-math-only")
                 .flag_if_supported("-fno-enforce-eh-specs");
         }
 
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
-            // XXX: https://doc.rust-lang.org/std/arch/index.html
+            // XXX: for native compilation only, https://doc.rust-lang.org/std/arch/index.html
             // https://doc.rust-lang.org/reference/conditional-compilation.html
-            cc.define("BL_BUILD_OPT_AVX512", None);     let mut avx512 = "";
-            is_x86_feature_detected!("avx512f") .then(|| avx512 = "avx512f");
-            is_x86_feature_detected!("avx512bw").then(|| avx512 = "avx512bw");
-            is_x86_feature_detected!("avx512dq").then(|| avx512 = "avx512dq");
-            is_x86_feature_detected!("avx512cd").then(|| avx512 = "avx512cd");
-            is_x86_feature_detected!("avx512vl").then(|| avx512 = "avx512vl");
-            if !avx512.is_empty() { cc.flag(format!("-m{avx512}"))
-                    .flag("-mpopcnt").flag("-mpclmul").flag("-mbmi").flag("-mbmi2")
-                    .define("BL_TARGET_OPT_POPCNT", None).define("BL_TARGET_OPT_BMI2", None);
+            cc.define("BL_BUILD_OPT_AVX512", None);
+            let avx512_flags = ["-mpopcnt", "-mpclmul", "-mbmi", "-mbmi2",
+                "-mavx512f", "-mavx512bw", "-mavx512dq", "-mavx512cd", "-mavx512vl"];
+            let has_avx512 = is_x86_feature_detected!("avx512f")  &&
+                             is_x86_feature_detected!("avx512bw") &&
+                             is_x86_feature_detected!("avx512dq") &&
+                             is_x86_feature_detected!("avx512cd") &&
+                             is_x86_feature_detected!("avx512vl");
+            if  has_avx512 && avx512_flags.iter().all(|flag|
+                cc.is_flag_supported(flag).unwrap_or(false)) {
+                cc.flags(avx512_flags).define("BL_TARGET_OPT_POPCNT", None)
+                                      .define("BL_TARGET_OPT_BMI2", None);
             }
 
-            //is_x86_feature_detected!("avxifma").then(|| cc.flag("-mfma")); // AKA avx2fma?
-            is_x86_feature_detected!("avx2").then(|| cc.flag("-mavx2").flag_if_supported("-mfma")
+            is_x86_feature_detected!("avx2").then(|| cc.flag("-mavx2")
                     .flag("-mpopcnt").flag("-mpclmul").flag("-mbmi").flag("-mbmi2")
                     .define("BL_TARGET_OPT_POPCNT", None).define("BL_TARGET_OPT_BMI2", None));
+            if  cc.is_flag_supported("-mfma") {
+                cc.flag("-mfma").define("BL_TARGET_OPT_FMA", None);
+            }
 
             is_x86_feature_detected!("avx").then(||
                 cc.flag("-mavx")   .flag("-mpopcnt").flag("-mpclmul"));
@@ -291,4 +298,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-

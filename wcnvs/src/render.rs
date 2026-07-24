@@ -90,7 +90,8 @@ fn render_nodes(ctx2d: &Context2d, parent: &usvg::Group, trfm: &usvg::Transform)
         usvg::Node::Image(img) => if img.is_visible() {
             match img.kind() {
                 usvg::ImageKind::GIF(_) | usvg::ImageKind::WEBP(_) |
-                usvg::ImageKind::PNG(_) | usvg::ImageKind::JPEG(_) => todo!(),
+                usvg::ImageKind::PNG(_) | usvg::ImageKind::JPEG(_) =>
+                    eprintln!("Raster images are not supported by the Canvas renderer"),
                 // https://github.com/linebender/vello_svg/blob/main/src/lib.rs#L212
                 usvg::ImageKind::SVG(svg) => render_nodes(ctx2d, svg.root(), trfm),
             }
@@ -105,10 +106,10 @@ fn render_nodes(ctx2d: &Context2d, parent: &usvg::Group, trfm: &usvg::Transform)
 fn convert_paint(ctx2d: &Context2d, paint: &usvg::Paint,
     opacity: usvg::Opacity, _trfm: &usvg::Transform) -> Option<String> {
     fn to_css_color(color: usvg::Color, opacity: usvg::Opacity) -> String {
-        let mut str = format!("#{:0<2x}{:0<2x}{:0<2x}",
-            color.red, color.green, color.blue);
-        if opacity != 1.0 { str.push_str(&format!("{:0<2x}",
-            (opacity.get() * 255.) as u8)); }   str
+        let mut str = format!("#{:02x}{:02x}{:02x}", color.red, color.green, color.blue);
+        if opacity != 1.0 {
+            str.push_str(&format!("{:02x}", (opacity.get() * 255.) as u8));
+        }   str
     }
 
     match paint { usvg::Paint::Pattern(_) => { // trfm should be applied here
@@ -121,8 +122,8 @@ fn convert_paint(ctx2d: &Context2d, paint: &usvg::Paint,
             let linear = ctx2d.create_linear_gradient(
                 grad.x1() as _, grad.y1() as _, grad.x2() as _, grad.y2() as _);
 
-            grad.stops().iter().for_each(|stop| { let _ = linear.add_color_stop(0.0,
-                &to_css_color(stop.color(), stop.opacity() * opacity));
+            grad.stops().iter().for_each(|stop| { let _ = linear.add_color_stop(
+                stop.offset().get(), &to_css_color(stop.color(), stop.opacity() * opacity));
             }); linear.as_string()
         }
         usvg::Paint::RadialGradient(grad) => {
@@ -131,8 +132,8 @@ fn convert_paint(ctx2d: &Context2d, paint: &usvg::Paint,
                (grad.cx() - grad.fx()).hypot(grad.cy() - grad.fy()) as _,
                 grad.cx() as _, grad.cy() as _, grad.r().get() as _).unwrap();
 
-            grad.stops().iter().for_each(|stop| { let _ = radial.add_color_stop(0.0,
-                &to_css_color(stop.color(), stop.opacity() * opacity));
+            grad.stops().iter().for_each(|stop| { let _ = radial.add_color_stop(
+                stop.offset().get(), &to_css_color(stop.color(), stop.opacity() * opacity));
             }); radial.as_string()
         }
     }
@@ -306,9 +307,10 @@ fn wcns_arc_to(path: &Path2d, start: &Point, radii: &(f32, f32),
         x_rotation: (rotation as f64).to_radians(), large_arc: large, sweep,
     };
 
-    match kurbo::Arc::from_svg_arc(&svg_arc) {  None => path.line_to(end.x as _, end.x as _),
-        Some(arc) => arc.to_cubic_beziers(0.1, |p1, p2, p|
-            path.bezier_curve_to(p1.x as _, p1.y as _, p2.x as _, p2.y as _, p.x as _, p.y as _)),
+    match kurbo::Arc::from_svg_arc(&svg_arc) {
+        None => path.line_to(end.x as _, end.y as _),
+        Some(arc) => arc.to_cubic_beziers(0.1, |p1, p2, p| path.bezier_curve_to(
+            p1.x as _, p1.y as _, p2.x as _, p2.y as _, p.x as _, p.y as _)),
     }
 }
 
@@ -316,8 +318,8 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
     ctx2d: &Context2d, style: &Style) -> String {
     fn to_css_color<R: io::Read, W: io::Write>(img: &TinyVG<R, W>, idx: u32) -> String {
         let color = img.lookup_color(idx);
-        let mut str = format!("#{:0<2x}{:0<2x}{:0<2x}", color.r, color.g, color.b);
-        if color.a != 255 {    str.push_str(&format!("{:0<2x}", color.a)); }    str
+        let mut str = format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b);
+        if color.a != 255 {   str.push_str(&format!("{:02x}", color.a)); }  str
     }
 
     match style {   Style::FlatColor(idx) => to_css_color(img, *idx),
@@ -339,4 +341,3 @@ fn convert_style<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
         }
     }
 }
-
