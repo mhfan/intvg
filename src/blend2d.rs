@@ -32,6 +32,12 @@ mod b2d_ffi { include!("../target/bindings/blend2d.rs"); }  use b2d_ffi::*;
     ($v:expr) => { safe_dbg!($v, 0) };
 }
 
+macro_rules! bl_result {
+    ($v:expr) => {{ let res = unsafe { $v };
+        if res == BLResultCode::BL_SUCCESS as u32 { Ok(()) } else { Err(BLErr(res)) }
+    }};
+}
+
 //  https://blend2d.com/doc/group__bl__object.html
 fn object_init<T>() -> T { // for BLObjectCore
     let mut s = mem::MaybeUninit::<T>::uninit();
@@ -146,8 +152,6 @@ impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
         safe_dbg!(bl_context_stroke_geometry_ext(&mut self.0, T::GEOM_T,
             geom as *const _ as _, style as *const _ as _));
     }
-
-    // TODO: textPath - to render text along the shape of a path
 
     #[inline] pub fn fill_utf8_text_d_rgba32(&mut self, origin: BLPoint,
         font: &BLFont, text: &str, color: BLRgba32) {
@@ -361,15 +365,17 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
 
     #[inline] pub fn read_from_data(data: &[u8]) -> Result<Self, BLErr> {
         let mut img = object_init();    safe_dbg!(bl_image_init(&mut img));
-        let res = unsafe { bl_image_read_from_data(&mut img,
-            data.as_ptr() as _, data.len(), null()) };
-        if is_error(res) { Err(BLErr(res)) } else { Ok(Self(img)) }
+        bl_result!(bl_image_read_from_data(&mut img,
+            data.as_ptr() as _, data.len(), null()))?;
+        Ok(Self(img))
     }
     #[inline] pub fn from_file(file: &str) -> Result<Self, BLErr> {
-        let mut img = object_init();    safe_dbg!(bl_image_init(&mut img));
-        let file = CString::new(file).unwrap();
-        let res = unsafe { bl_image_read_from_file(&mut img, file.as_ptr(), null()) };
-        if is_error(res) { Err(BLErr(res)) } else { Ok(Self(img)) }
+        let mut img = object_init();
+        bl_result!(bl_image_init(&mut img))?;
+        let file = CString::new(file).map_err(|_|
+            BLErr(BLResultCode::BL_ERROR_INVALID_STRING as _))?;
+        bl_result!(bl_image_read_from_file(&mut img, file.as_ptr(), null()))?;
+        Ok(Self(img))
     }
 
     #[inline] pub fn scale(&mut self, src: &BLImage,
@@ -378,9 +384,9 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
     }
 
     #[inline] pub fn write_to_file<S: Into<Vec<u8>>>(&self, file: S) -> Result<(), BLErr> {
-        let cstr = CString::new(file).unwrap();
-        let res = unsafe { bl_image_write_to_file(&self.0, cstr.as_ptr(), null()) };
-        if is_error(res) { Err(BLErr(res)) } else { Ok(()) }
+        let cstr = CString::new(file).map_err(|_|
+            BLErr(BLResultCode::BL_ERROR_INVALID_STRING as _))?;
+        bl_result!(bl_image_write_to_file(&self.0, cstr.as_ptr(), null()))?;    Ok(())
     }
     #[inline] pub fn save_png<S: Into<Vec<u8>>>(&self, file: S) -> Result<(), BLErr> {
         self.write_to_file(file)?;    Ok(())
@@ -401,6 +407,9 @@ impl BLImageData {
     //#[inline] pub fn format(&self) -> u32 { self.format }
     //#[inline] pub fn flags (&self) -> u32 { self.flags }
 }
+
+#[path = "text_path.rs"] mod text_path;
+pub use text_path::{TextPathOptions, TextPathPaint};
 
 pub struct BLFont(BLFontCore); //  https://blend2d.com/doc/group__bl__text.html
 impl Drop for BLFont { #[inline] fn drop(&mut self) {
@@ -424,28 +433,28 @@ impl Drop for BLFontFace {
 impl BLFontFace {
     #[inline] pub fn new(data: &[u8]) -> Result<Self, BLErr> {
         let mut face  = object_init();
-        safe_dbg!(bl_font_face_init(&mut face));
+        bl_result!(bl_font_face_init(&mut face))?;
 
         let mut fdata = object_init();
-        safe_dbg!(bl_font_data_init(&mut fdata));
+        bl_result!(bl_font_data_init(&mut fdata))?;
         //let cstr = CString::new(file).unwrap();
-        //let res = unsafe { bl_font_data_create_from_file(&mut fdata,
-        //    cstr.as_ptr(), BLFileReadFlags::BL_FILE_READ_NO_FLAGS) };
-        let res = unsafe { bl_font_data_create_from_data(&mut fdata,
-            data.as_ptr() as _, data.len(), None, null_mut()) };
-        if is_error(res) { return Err(BLErr(res)) }
+        //bl_result!(bl_font_data_create_from_file(&mut fdata,
+        //    cstr.as_ptr(), BLFileReadFlags::BL_FILE_READ_NO_FLAGS))?;
+        bl_result!(bl_font_data_create_from_data(&mut fdata,
+            data.as_ptr() as _, data.len(), None, null_mut()))?;
 
-        safe_dbg!(bl_font_face_create_from_data(&mut face, &fdata, 0));
-        safe_dbg!(bl_font_data_destroy(&mut fdata));       Ok(Self(face))
+        bl_result!(bl_font_face_create_from_data(&mut face, &fdata, 0))?;
+        bl_result!(bl_font_data_destroy(&mut fdata))?;    Ok(Self(face))
     }
 
     #[inline] pub fn from_file(file: &str) -> Result<Self, BLErr> {
         let mut face = object_init();
-        safe_dbg!(bl_font_face_init(&mut face));
-        let cstr = CString::new(file).unwrap();
-        let res = unsafe { bl_font_face_create_from_file(&mut face, cstr.as_ptr(),
-            BLFileReadFlags::BL_FILE_READ_NO_FLAGS) };
-        if is_error(res) { Err(BLErr(res)) } else { Ok(Self(face)) }
+        bl_result!(bl_font_face_init(&mut face))?;
+        let cstr = CString::new(file).map_err(|_|
+            BLErr(BLResultCode::BL_ERROR_INVALID_STRING as _))?;
+        bl_result!(bl_font_face_create_from_file(&mut face, cstr.as_ptr(),
+            BLFileReadFlags::BL_FILE_READ_NO_FLAGS))?;
+        Ok(Self(face))
     }
 }
 
@@ -707,13 +716,11 @@ impl BLPath {
     #[inline] pub fn get_size(&self) -> u32 { unsafe { bl_path_get_size(&self.0) as _ } }
     #[inline] pub fn get_last_vertex(&self) -> Option<BLPoint> {
         let mut pt = BLPoint { x: 0.0, y: 0.0 };
-        if is_error(unsafe { bl_path_get_last_vertex(&self.0, &mut pt) }) {
-            None } else { Some(pt) }
+        bl_result!(bl_path_get_last_vertex(&self.0, &mut pt)).ok().map(|_| pt)
     }
     #[inline] pub fn get_bounding_box(&self) -> Option<BLBox> {
         let mut bbox = BLBox::new();
-        if is_error(unsafe { bl_path_get_bounding_box(&self.0, &mut bbox) }) {
-            None } else { Some(bbox) }
+        bl_result!(bl_path_get_bounding_box(&self.0, &mut bbox)).ok().map(|_| bbox)
     }
     #[inline] pub fn hit_test(&self, pt: BLPoint, fill_rule: BLFillRule) -> BLHitTest {
         unsafe { bl_path_hit_test(&self.0, &pt, fill_rule) }
@@ -1144,8 +1151,6 @@ impl core::fmt::Display for BLErr {
 impl std::error::Error  for BLErr {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> { None }
 }
-
-#[inline] fn is_error(res: BLResult) -> bool { res != BLResultCode::BL_SUCCESS as u32 }
 
 //}
 
