@@ -8,7 +8,7 @@ use kurbo::{CubicBez, Line, PathSeg, Point, QuadBez,
     ParamCurve, ParamCurveArclen, ParamCurveDeriv,
 };
 
-impl BLContext {
+impl BLContext<'_> {
     /// Shapes and draws `text` along the first non-empty contour of `path`.
     ///
     /// Glyphs are positioned by advance width and rotated to the local tangent.
@@ -23,7 +23,7 @@ impl BLContext {
 
         let (mut outlines, mut cursor) = (BLPath::new(), options.start_offset);
         let glyphs = BLGlyphBuffer::shape(font, text)?;
-        let font_matrix = font_matrix(font)?;
+        let font_matrix = font_matrix(font);
 
         for (glyph_id, placement) in glyphs.items() {
             let advance = font_matrix.map(&placement.advance);
@@ -48,9 +48,9 @@ impl BLContext {
             let origin = BLPoint::new();
             match paint {
                 TextPathPaint::Fill(style) => bl_result!(bl_context_fill_path_d_ext(
-                    &mut self.0, &origin, &outlines.0, style as *const _ as _))?,
+                    &mut self.0, &origin, &outlines.0, style.as_ptr()))?,
                 TextPathPaint::Stroke(style) => bl_result!(bl_context_stroke_path_d_ext(
-                    &mut self.0, &origin, &outlines.0, style as *const _ as _))?,
+                    &mut self.0, &origin, &outlines.0, style.as_ptr()))?,
             }
         }   Ok(())
     }
@@ -77,13 +77,17 @@ impl BLContext {
 
 // Future shaping options (direction, script, language, and OpenType features)
 // belong beside this RAII wrapper if BLFont's defaults are no longer sufficient.
-struct BLGlyphBuffer(BLGlyphBufferCore);
+struct BLGlyphBuffer(BLGlyphBufferCore); // XXX: better move to blend2d.rs?
+impl Drop for BLGlyphBuffer {
+    fn drop(&mut self) { bl_debug!(bl_glyph_buffer_destroy(&mut self.0)); }
+}
 
 impl   BLGlyphBuffer {
     fn shape(font: &BLFont, text: &str) -> Result<Self, BLErr> {
         let mut core = object_init();
-        bl_result!(bl_glyph_buffer_init(&mut core))?;
+        bl_debug!(bl_glyph_buffer_init(&mut core));
         let mut buffer = Self(core);
+
         bl_result!(bl_glyph_buffer_set_text(&mut buffer.0, text.as_ptr().cast(),
             text.len(), BLTextEncoding::BL_TEXT_ENCODING_UTF8))?;
         bl_result!(bl_font_shape(&font.0, &mut buffer.0))?;
@@ -91,21 +95,19 @@ impl   BLGlyphBuffer {
     }
 
     fn items(&self) -> impl Iterator<Item = (BLGlyphId, &BLGlyphPlacement)> + '_ {
+        // SAFETY: `self.0` is a live glyph buffer for the duration of the call.
         let len = unsafe { bl_glyph_buffer_get_size(&self.0) };
-        let (ids, placements): (&[BLGlyphId], &[BLGlyphPlacement]) = if len == 0 {
-            (&[], &[]) } else { unsafe {(
+        let (ids, placements): (&[BLGlyphId], &[BLGlyphPlacement]) =
+            if len == 0 { (&[], &[]) } else { unsafe {(
+                // SAFETY: after successful shaping Blend2D exposes parallel glyph
+                // and placement arrays of `len` elements owned by this buffer.
                 core::slice::from_raw_parts(bl_glyph_buffer_get_content(&self.0), len),
                 core::slice::from_raw_parts(
                     bl_glyph_buffer_get_placement_data(&self.0), len),
-            )}
-        };  ids.iter().copied().zip(placements)
+            )} };
+        ids.iter().copied().zip(placements)
     }
 }
-
-impl Drop for BLGlyphBuffer { fn drop(&mut self) {
-        bl_result!(bl_glyph_buffer_destroy(&mut self.0))
-            .expect("failed to destroy glyph buffer");
-} }
 
 // Keep this linear-only: glyph outlines already receive Blend2D's font matrix.
 // A future writing-mode implementation may expose both inline and block vectors.
@@ -119,10 +121,11 @@ impl FontMatrix {
     }
 }
 
-fn font_matrix(font: &BLFont) -> Result<FontMatrix, BLErr> {
+fn font_matrix(font: &BLFont) -> FontMatrix {
     let mut matrix = object_init();
-    bl_result!(bl_font_get_matrix(&font.0, &mut matrix))?;
-    Ok(FontMatrix(unsafe { *matrix.__bindgen_anon_1.m }))
+    bl_debug!(bl_font_get_matrix(&font.0, &mut matrix));
+    // SAFETY: `bl_font_get_matrix` initialized the matrix member on success.
+    FontMatrix(unsafe { *matrix.__bindgen_anon_1.m })
 }
 
 struct MeasuredSegment {
@@ -221,7 +224,7 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
 
 #[cfg(test)] mod tests { use super::*;
 
-    #[test] fn measures_and_samples_a_line() {
+    #[test] fn measures_and_samples_a_line() -> Result<(), BLErr> {
         let mut path = BLPath::new();
         path.move_to(( 10.0, 20.0).into());
         path.line_to((110.0, 20.0).into());
@@ -231,9 +234,10 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
         assert!((measured.length - 100.0).abs() < 1e-9);
         assert_eq!(point, Point::new(35.0, 20.0));
         assert_eq!(tangent, (1.0, 0.0));
+        Ok(())
     }
 
-    #[test] fn ignores_later_contours() {
+    #[test] fn ignores_later_contours() -> Result<(), BLErr> {
         let mut path = BLPath::new();
         path.move_to((  0.0, 0.0).into());
         path.line_to(( 10.0, 0.0).into());
@@ -241,5 +245,6 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
         path.line_to((200.0, 0.0).into());
 
         assert!((MeasuredPath::new(&path).length - 10.0).abs() < 1e-9);
+        Ok(())
     }
 }
