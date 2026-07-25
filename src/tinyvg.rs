@@ -602,16 +602,13 @@ trait TVGRead: io::Read  {
         let (mut val, mut cnt) = (0u32, 0);
         while cnt < core::mem::size_of::<VarUInt>() * 8 {
             let byte = self.read_u8()?;
-            /* if cnt == 28 && byte & 0xF0 != 0 { return Err(TVGError {
-                msg: "Invalid VarUInt encoding; fifth byte exceeds 32 bits",
-                kind: ErrorKind::InvalidData(byte),
-            }) } */
+            if cnt == 28 && byte > 0x0f { break }
             val |= ((byte & 0x7F) as u32)    << cnt;
             if  byte < 0x80 { return Ok(val) }  cnt += 7;
         }
 
         Err(TVGError { kind: ErrorKind::InvalidData(val as _),
-            msg: "Invalid VarUInt encoding; too many bytes" })
+            msg: "Invalid or oversized VarUInt encoding" })
     }
 }
 

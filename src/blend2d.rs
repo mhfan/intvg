@@ -10,11 +10,11 @@
 
 //pub mod blend2d  {    // https://blend2d.com
 use std::ffi::CString;
-use core::{marker::PhantomData, mem, ptr::{self, null, null_mut}};
+use core::{marker::PhantomData, mem, ptr::{self, null, null_mut}, slice::from_raw_parts};
 
 pub use b2d_ffi::{BLFormat, BLPoint, BLMatrix2D, BLFontMatrix, BLRgba, BLRgba64, BLRgba32,
-    BLFillRule, BLStrokeCap, BLStrokeJoin, BLCompOp, BLImageScaleFilter, BLRectI,
-    BLRect, BLBox, BLLine, BLArc, BLCircle, BLEllipse, BLTriangle, BLRoundRect, BLHitTest,
+    BLFillRule, BLStrokeCap, BLStrokeJoin, BLCompOp, BLImageScaleFilter, BLRectI, BLRect,
+    BLBox, BLLine, BLArc, BLCircle, BLEllipse, BLTriangle, BLRoundRect, BLHitTest,
     BLLinearGradientValues, BLRadialGradientValues, BLConicGradientValues,
 };
 
@@ -376,10 +376,10 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
         if data.stride < 0 { return None; }
         let len = data.stride as usize * data.size.h as usize;
         if len == 0 { return Some(&[]); }
-        let ptr = core::ptr::NonNull::new(data.pixel_data.cast())?;
+        let ptr = ptr::NonNull::new(data.pixel_data.cast())?;
         // SAFETY: Blend2D owns this pixel region and the returned slice borrows
         // `self`, preventing mutation or destruction of the image while in use.
-        Some(unsafe { core::slice::from_raw_parts(ptr.as_ptr(), len) })
+        Some(unsafe { from_raw_parts(ptr.as_ptr(), len) })
     }
     pub fn stride(&self) -> isize { self.data().stride }
     pub fn height(&self) -> u32 { self.data().size.h as _ }
@@ -457,9 +457,8 @@ impl BLGlyphBuffer {
             if len == 0 { (&[], &[]) } else { unsafe {(
                 // SAFETY: after successful shaping Blend2D exposes parallel glyph
                 // and placement arrays of `len` elements owned by this buffer.
-                core::slice::from_raw_parts(bl_glyph_buffer_get_content(&self.0), len),
-                core::slice::from_raw_parts(
-                    bl_glyph_buffer_get_placement_data(&self.0), len),
+                from_raw_parts(bl_glyph_buffer_get_content(&self.0), len),
+                from_raw_parts(bl_glyph_buffer_get_placement_data(&self.0), len),
             )} };
         ids.iter().copied().zip(placements)
     }
@@ -842,14 +841,12 @@ impl BLPath {
     pub fn iter(&self) -> BLPathIter<'_> {
         // SAFETY: `self.0` is a live Blend2D path for the duration of the call.
         let len = unsafe { bl_path_get_size(&self.0) };
-        let (cmd, vtx) = if len == 0 { (&[][..], &[][..]) } else {
+        let (cmd, vtx) = if len == 0 { (&[][..], &[][..]) } else { unsafe {
             // SAFETY: Blend2D stores parallel command/vertex arrays with `len` entries,
             // and the iterator borrow prevents path mutation or drop.
-            unsafe {
-                (core::slice::from_raw_parts(bl_path_get_command_data(&self.0), len),
-                 core::slice::from_raw_parts(bl_path_get_vertex_data(&self.0), len))
-            }
-        };
+                (from_raw_parts(bl_path_get_command_data(&self.0), len),
+                 from_raw_parts(bl_path_get_vertex_data(&self.0), len))
+        } };
         BLPathIter { cmd, vtx, idx: 0 }
     }
 }

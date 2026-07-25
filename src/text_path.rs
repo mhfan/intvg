@@ -84,7 +84,7 @@ struct MeasuredPath {
     // closed: bool,  // Enables wrapping text around a closed contour.
 }
 
-const ARC_LENGTH_ACCURACY: f64 = 0.01;
+const ACCURACY_TOLERANCE: f64 = 0.01;
 
 impl   MeasuredPath {
     fn new(path: &BLPath) -> Self {
@@ -121,7 +121,7 @@ impl   MeasuredPath {
             };
 
             if let Some(segment) = segment {
-                let segment_length = segment.arclen(ARC_LENGTH_ACCURACY);
+                let segment_length = segment.arclen(ACCURACY_TOLERANCE);
                 if  segment_length > 0.0 {
                     segments.push(MeasuredSegment {
                         segment, start: length, length: segment_length,
@@ -139,7 +139,7 @@ impl   MeasuredPath {
         let index = self.segments.partition_point(|item| item.start + item.length < distance);
         let measured = self.segments.get(index).or_else(|| self.segments.last())?;
         let local = (distance - measured.start).clamp(0.0, measured.length);
-        let t = measured.segment.inv_arclen(local, ARC_LENGTH_ACCURACY);
+        let t = measured.segment.inv_arclen(local, ACCURACY_TOLERANCE);
         let point = measured.segment.eval(t);
         Some((point, segment_tangent(measured.segment, t)))
     }
