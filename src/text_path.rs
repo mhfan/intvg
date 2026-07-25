@@ -4,8 +4,8 @@
 //! follows the first non-empty contour and each glyph remains rigid.
 
 use super::*;
-use kurbo::{CubicBez, Line, PathSeg, Point, QuadBez,
-    ParamCurve, ParamCurveArclen, ParamCurveDeriv,
+use kurbo::{CubicBez, Line as KLine, Point as KPoint, QuadBez,
+    PathSeg, ParamCurve, ParamCurveArclen, ParamCurveDeriv,
 };
 
 impl BLContext {
@@ -22,12 +22,11 @@ impl BLContext {
         if  measured.length == 0.0 { return Ok(()); }
 
         let (mut outlines, mut cursor) = (BLPath::new(), options.start_offset);
-        let glyphs = BLGlyphBuffer::shape(font, text)?;
-        let font_matrix = font_matrix(font);
+        let (glyphs, fmatrix) = (font.shape(text)?, font.get_matrix());
 
         for (glyph_id, placement) in glyphs.items() {
-            let advance = font_matrix.map(&placement.advance);
-            let offset  = font_matrix.map(&placement.placement);
+            let advance = fmatrix.map(&placement.advance);
+            let offset  = fmatrix.map(&placement.placement);
             let center_distance = cursor + offset.0 + advance.0 * 0.5;
             cursor += advance.0;
 
@@ -75,59 +74,6 @@ impl BLContext {
     // pub contour: usize,         // Select a contour instead of always using the first.
 }
 
-// Future shaping options (direction, script, language, and OpenType features)
-// belong beside this RAII wrapper if BLFont's defaults are no longer sufficient.
-struct BLGlyphBuffer(BLGlyphBufferCore); // XXX: better move to blend2d.rs?
-impl Drop for BLGlyphBuffer {
-    fn drop(&mut self) { bl_debug!(bl_glyph_buffer_destroy(&mut self.0)); }
-}
-
-impl   BLGlyphBuffer {
-    fn shape(font: &BLFont, text: &str) -> Result<Self, BLErr> {
-        let mut core = object_init();
-        bl_debug!(bl_glyph_buffer_init(&mut core));
-        let mut buffer = Self(core);
-
-        bl_result!(bl_glyph_buffer_set_text(&mut buffer.0, text.as_ptr().cast(),
-            text.len(), BLTextEncoding::BL_TEXT_ENCODING_UTF8))?;
-        bl_result!(bl_font_shape(&font.0, &mut buffer.0))?;
-        Ok(buffer)
-    }
-
-    fn items(&self) -> impl Iterator<Item = (BLGlyphId, &BLGlyphPlacement)> + '_ {
-        // SAFETY: `self.0` is a live glyph buffer for the duration of the call.
-        let len = unsafe { bl_glyph_buffer_get_size(&self.0) };
-        let (ids, placements): (&[BLGlyphId], &[BLGlyphPlacement]) =
-            if len == 0 { (&[], &[]) } else { unsafe {(
-                // SAFETY: after successful shaping Blend2D exposes parallel glyph
-                // and placement arrays of `len` elements owned by this buffer.
-                core::slice::from_raw_parts(bl_glyph_buffer_get_content(&self.0), len),
-                core::slice::from_raw_parts(
-                    bl_glyph_buffer_get_placement_data(&self.0), len),
-            )} };
-        ids.iter().copied().zip(placements)
-    }
-}
-
-// Keep this linear-only: glyph outlines already receive Blend2D's font matrix.
-// A future writing-mode implementation may expose both inline and block vectors.
-#[derive(Clone, Copy)] struct FontMatrix([f64; 4]);
-
-impl FontMatrix {
-    fn map(self, value: &BLPointI) -> (f64, f64) {
-        let [m00, m01, m10, m11] = self.0;
-        (value.x as f64 * m00 + value.y as f64 * m10,
-         value.x as f64 * m01 + value.y as f64 * m11)
-    }
-}
-
-fn font_matrix(font: &BLFont) -> FontMatrix {
-    let mut matrix = object_init();
-    bl_debug!(bl_font_get_matrix(&font.0, &mut matrix));
-    // SAFETY: `bl_font_get_matrix` initialized the matrix member on success.
-    FontMatrix(unsafe { *matrix.__bindgen_anon_1.m })
-}
-
 struct MeasuredSegment {
     segment: PathSeg, start: f64, length: f64,
     // arclen_lut: ..., // Add only if profiling shows repeated inversion is costly.
@@ -155,21 +101,20 @@ impl   MeasuredPath {
                 }
                 BLPathItem::LineTo(end) => current.map(|start| {
                     current = Some(end);
-                    PathSeg::Line(Line::new(point(start), point(end)))
+                    PathSeg::Line(KLine::new(start, end))
                 }),
                 BLPathItem::QuadTo(control, end) => current.map(|start| {
                     current = Some(end);
-                    PathSeg::Quad(QuadBez::new(point(start), point(control), point(end)))
+                    PathSeg::Quad(QuadBez::new(start, control, end))
                 }),
                 BLPathItem::CubicTo(control1, control2, end) => current.map(|start| {
                     current = Some(end);
-                    PathSeg::Cubic(CubicBez::new(point(start),
-                        point(control1), point(control2), point(end)))
+                    PathSeg::Cubic(CubicBez::new(start, control1, control2, end))
                 }),
                 BLPathItem::Close => match (current, contour_start) {
                     (Some(start), Some(end)) if start.x != end.x || start.y != end.y => {
                         current = Some(end);
-                        Some(PathSeg::Line(Line::new(point(start), point(end))))
+                        Some(PathSeg::Line(KLine::new(start, end)))
                     }
                     _ => None,
                 },
@@ -177,7 +122,7 @@ impl   MeasuredPath {
 
             if let Some(segment) = segment {
                 let segment_length = segment.arclen(ARC_LENGTH_ACCURACY);
-                if segment_length > 0.0 {
+                if  segment_length > 0.0 {
                     segments.push(MeasuredSegment {
                         segment, start: length, length: segment_length,
                     });
@@ -189,7 +134,7 @@ impl   MeasuredPath {
         Self { segments, length }
     }
 
-    fn sample(&self, distance: f64) -> Option<(Point, (f64, f64))> {
+    fn sample(&self, distance: f64) -> Option<(KPoint, (f64, f64))> {
         if !(0.0..=self.length).contains(&distance) { return None; }
         let index = self.segments.partition_point(|item| item.start + item.length < distance);
         let measured = self.segments.get(index).or_else(|| self.segments.last())?;
@@ -200,25 +145,27 @@ impl   MeasuredPath {
     }
 }
 
-fn point(value: BLPoint) -> Point { Point::new(value.x, value.y) }
+impl From<BLPoint> for KPoint {
+    fn from(value: BLPoint) -> Self { Self::new(value.x, value.y) }
+}
 
 fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
     let vector = match segment {
-        PathSeg::Line(line) => line.p1 - line.p0,
-        PathSeg::Quad(quad) => quad.deriv().eval(t).to_vec2(),
+        PathSeg::Line(line)   => line.p1 - line.p0,
+        PathSeg::Quad(quad)   =>  quad.deriv().eval(t).to_vec2(),
         PathSeg::Cubic(cubic) => cubic.deriv().eval(t).to_vec2(),
     };
     let length = vector.hypot();
-    if  length == 0.0 {
-        let delta = 1e-6;
-        let chord = segment.eval((t + delta).min(1.0)) - segment.eval((t - delta).max(0.0));
+    if  length == 0.0 {     let delta = 1e-6;
+        let chord = segment.eval((t + delta).min(1.0)) -
+                    segment.eval((t - delta).max(0.0));
         let chord_length = chord.hypot();
+
         debug_assert!(chord_length > 0.0);
         return if chord_length > 0.0 {
             (chord.x / chord_length, chord.y / chord_length)
         } else { (1.0, 0.0) };
-    }
-    debug_assert!(length > 0.0);
+    }   debug_assert!(length > 0.0);
     (vector.x / length, vector.y / length)
 }
 
@@ -232,7 +179,7 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
         let measured = MeasuredPath::new(&path);
         let (point, tangent) = measured.sample(25.0).unwrap();
         assert!((measured.length - 100.0).abs() < 1e-9);
-        assert_eq!(point, Point::new(35.0, 20.0));
+        assert_eq!(point, KPoint::new(35.0, 20.0));
         assert_eq!(tangent, (1.0, 0.0));
         Ok(())
     }

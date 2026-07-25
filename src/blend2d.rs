@@ -12,7 +12,7 @@
 use std::ffi::CString;
 use core::{marker::PhantomData, mem, ptr::{self, null, null_mut}};
 
-pub use b2d_ffi::{BLFormat, BLPoint, BLMatrix2D, BLRgba, BLRgba64, BLRgba32,
+pub use b2d_ffi::{BLFormat, BLPoint, BLMatrix2D, BLFontMatrix, BLRgba, BLRgba64, BLRgba32,
     BLFillRule, BLStrokeCap, BLStrokeJoin, BLCompOp, BLImageScaleFilter, BLRectI,
     BLRect, BLBox, BLLine, BLArc, BLCircle, BLEllipse, BLTriangle, BLRoundRect, BLHitTest,
     BLLinearGradientValues, BLRadialGradientValues, BLConicGradientValues,
@@ -432,6 +432,50 @@ impl core::ops::DerefMut for BLImageView<'_> {
 #[path = "text_path.rs"] mod text_path;
 pub use text_path::{TextPathOptions, TextPathPaint};
 
+// Future shaping options (direction, script, language, and OpenType features)
+// belong beside this RAII wrapper if BLFont's defaults are no longer sufficient.
+pub struct BLGlyphBuffer(BLGlyphBufferCore);
+impl Drop for BLGlyphBuffer {
+    fn drop(&mut self) { bl_debug!(bl_glyph_buffer_destroy(&mut self.0)); }
+}
+
+impl BLGlyphBuffer {
+    pub fn new(text: &str) -> Result<Self, BLErr> {
+        let mut core = object_init();
+        bl_debug!(bl_glyph_buffer_init(&mut core));
+        let mut buffer = Self(core);
+
+        bl_result!(bl_glyph_buffer_set_text(&mut buffer.0, text.as_ptr().cast(),
+            text.len(), BLTextEncoding::BL_TEXT_ENCODING_UTF8))?;
+        Ok(buffer)
+    }
+
+    pub fn items(&self) -> impl Iterator<Item = (BLGlyphId, &BLGlyphPlacement)> + '_ {
+        // SAFETY: `self.0` is a live glyph buffer for the duration of the call.
+        let len = unsafe { bl_glyph_buffer_get_size(&self.0) };
+        let (ids, placements): (&[BLGlyphId], &[BLGlyphPlacement]) =
+            if len == 0 { (&[], &[]) } else { unsafe {(
+                // SAFETY: after successful shaping Blend2D exposes parallel glyph
+                // and placement arrays of `len` elements owned by this buffer.
+                core::slice::from_raw_parts(bl_glyph_buffer_get_content(&self.0), len),
+                core::slice::from_raw_parts(
+                    bl_glyph_buffer_get_placement_data(&self.0), len),
+            )} };
+        ids.iter().copied().zip(placements)
+    }
+}
+
+impl BLFontMatrix {
+    // Keep this linear-only: glyph outlines already receive this font matrix.
+    // A future writing-mode implementation may expose inline and block vectors.
+    pub fn map(&self, value: &BLPointI) -> (f64, f64) {
+        // SAFETY: `bl_font_get_matrix` initializes this union member.
+        let [m00, m01, m10, m11] = unsafe { *self.__bindgen_anon_1.m };
+        (value.x as f64 * m00 + value.y as f64 * m10,
+         value.x as f64 * m01 + value.y as f64 * m11)
+    }
+}
+
 pub struct BLFont(BLFontCore); //  https://blend2d.com/doc/group__bl__text.html
 impl Drop for BLFont { fn drop(&mut self) { bl_debug!(bl_font_destroy(&mut self.0)); } }
 impl BLFont {   // TODO: a bunch of interfaces need to be regarded
@@ -444,6 +488,16 @@ impl BLFont {   // TODO: a bunch of interfaces need to be regarded
         //bl_result!(bl_font_create_from_face_with_settings(&mut font.0, &face.core, size,
         //    feature_settings, variation_settings))?;
         Ok(font)
+    }
+    pub fn shape(&self, text: &str) -> Result<BLGlyphBuffer, BLErr> {
+        let mut buffer = BLGlyphBuffer::new(text)?;
+        bl_result!(bl_font_shape(&self.0, &mut buffer.0))?;
+        Ok(buffer)
+    }
+    pub fn get_matrix(&self) -> BLFontMatrix {
+        let mut matrix = object_init();
+        bl_debug!(bl_font_get_matrix(&self.0, &mut matrix));
+        matrix
     }
 }
 
