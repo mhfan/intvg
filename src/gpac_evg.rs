@@ -6,7 +6,7 @@
  ****************************************************************/
 
 //pub mod gpac_evg {    // https://github.com/gpac/gpac/tree/master/src/evg/
-use core::{marker::PhantomData, ptr::NonNull};
+use core::ptr::NonNull;
 
 #[allow(unused, non_snake_case, non_camel_case_types)]
     //non_upper_case_globals, //clippy::approx_constant, clippy::useless_transmute,
@@ -203,13 +203,16 @@ impl Stencil {
     }
 }
 
-pub struct Surface<'a>(NonNull<GF_EVGSurface>, PhantomData<&'a mut Pixmap>);
-impl Drop for Surface<'_> {
+pub struct Surface(NonNull<GF_EVGSurface>, Option<Pixmap>);
+impl Drop for Surface {
     // SAFETY: `self.0` is owned by this wrapper and released exactly once.
     fn drop(&mut self) { unsafe { gf_evg_surface_delete(self.0.as_ptr()) } }
 }
-impl<'a> Surface<'a> {
-    pub fn new(pixm: &'a mut Pixmap) -> Result<Self, EvgError> {
+impl Surface {
+    pub fn new(width: u32, height: u32) -> Result<Self, EvgError> {
+        Self::from_pixmap(Pixmap::new(width, height)?)
+    }
+    pub fn from_pixmap(pixm: Pixmap) -> Result<Self, EvgError> {
         let row_bytes = pixm.width.checked_mul(4).ok_or_else(EvgError::bad_parameter)?;
         let required = row_bytes.checked_mul(pixm.height)
             .ok_or_else(EvgError::bad_parameter)? as usize;
@@ -219,12 +222,16 @@ impl<'a> Surface<'a> {
         // SAFETY: the returned allocation is uniquely owned by `Surface`.
         let ptr = NonNull::new(unsafe { gf_evg_surface_new(Bool::GF_FALSE) })
             .ok_or_else(EvgError::out_of_memory)?;
-        let surf = Self(ptr, PhantomData);
+        let surf = Self(ptr, Some(pixm));
+        let pixm = surf.1.as_ref().expect("Surface always owns its Pixmap");
         evg_result!(gf_evg_surface_attach_to_buffer(surf.0.as_ptr(),
-            pixm.data.as_mut_ptr(), pixm.width, pixm.height, 4, stride,
+            pixm.data.as_ptr().cast_mut(), pixm.width, pixm.height, 4, stride,
             GF_PixelFormat::GF_PIXEL_RGBA))?;
         //evg_debug!(gf_evg_surface_clear(surf, &mut bbox, 0xFF000000));
         Ok(surf)
+    }
+    pub fn end(mut self) -> Pixmap {
+        self.1.take().expect("Surface always owns its Pixmap")
     }
 
     pub fn fill_path(&mut self, path: &VGPath, sten: &Stencil) -> Result<(), EvgError> {
@@ -274,20 +281,17 @@ impl Pixmap {
 
 #[cfg(test)] mod tests { use super::*;
     #[test] fn rejects_short_surface_buffer() {
-        let mut pixm = Pixmap { data: vec![0; 15], width: 2, height: 2 };
-        assert!(Surface::new(&mut pixm).is_err());
+        let pixm = Pixmap { data: vec![0; 15], width: 2, height: 2 };
+        assert!(Surface::from_pixmap(pixm).is_err());
     }
 
     #[test] fn fill_stroke() -> Result<(), Box<dyn std::error::Error>> {
-        let mut pixm = Pixmap::new(1024, 512)?;
-        let (width, height) = (pixm.width, pixm.height);
         let mut pens = GF_PenSettings::default();
         let mut sten = Stencil::new(GF_StencilType::GF_STENCIL_SOLID)?;
-        let (mut surf, mut path) = (Surface::new(&mut pixm)?, VGPath::new()?);
+        let (mut surf, mut path) = (Surface::new(1024, 512)?, VGPath::new()?);
 
-        path.add_rect(GF_Rect { x: (width as i32 >> 2).into(),
-            y:   (height as i32 - (height as i32 >> 2)).into(),
-            width: (width as i32 >> 1).into(), height: (height as i32 >> 1).into() });
+        path.add_rect(GF_Rect {
+            x: 256.into(), y: 384.into(), width: 512.into(), height: 256.into() });
         // RUSTDOCFLAGS="-Z unstable-options --nocapture" cargo +nightly test #--doc
 
         /* path.move_to(GF_Point2D { x: rect.x, y: rect.y });
@@ -302,7 +306,7 @@ impl Pixmap {
         sten.set_color(0xAA00FF00); pens.width = 10.into();
         surf.stroke_path(&path, &sten, &pens)?;
 
-        drop(surf);
+        let pixm = surf.end();
         pixm.save_png("target/demo_evg.png")?;  Ok(())
     }
 }

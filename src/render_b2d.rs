@@ -13,9 +13,8 @@ pub trait Render { fn render(&self, scale: f32) -> Result<BLImage, BLErr>; }
 
 impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
     fn render(&self, scale: f32) -> Result<BLImage, BLErr> {
-        let mut img = BLImage::new(
-            (self.header.width  as f32 * scale).ceil() as _,
-            (self.header.height as f32 * scale).ceil() as _, BLFormat::BL_FORMAT_PRGB32)?;
+        let width  = (self.header.width  as f32 * scale).ceil() as _;
+        let height = (self.header.height as f32 * scale).ceil() as _;
 
         #[allow(non_local_definitions)] impl From<&Rect> for BLRect {   // BLBox
             //fn from(rect: &Rect) -> Self { unsafe { std::mem::transmute(rect) } }
@@ -26,7 +25,8 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
         }
 
         // XXX: rendering up-scale and then scale down for anti-aliasing?
-        let (mut ctx, mut path) = (BLContext::new(&mut img)?, BLPath::new());
+        let (mut ctx, mut path) = (
+            BLContext::new(width, height, BLFormat::BL_FORMAT_PRGB32)?, BLPath::new());
         ctx.set_stroke_join(BLStrokeJoin::BL_STROKE_JOIN_ROUND);
         ctx.set_stroke_caps(BLStrokeCap::BL_STROKE_CAP_ROUND);
         ctx.set_stroke_miter_limit(4.0);
@@ -112,11 +112,11 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     } } else { ctx.stroke_geometry_ext(&path, pline.as_ref())?; }
                 }
             }   path.reset();
-        }   ctx.end()?;     Ok(img)
+        }   ctx.end()
     }
 }
 
-fn stroke_segment_path(seg: &Segment, ctx: &mut BLContext<'_>,
+fn stroke_segment_path(seg: &Segment, ctx: &mut BLContext,
     style: &dyn B2DStyle) -> Result<(), BLErr> {
     let mut path = BLPath::new();
     path.move_to(seg.start.into());

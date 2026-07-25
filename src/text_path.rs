@@ -8,7 +8,7 @@ use kurbo::{CubicBez, Line, PathSeg, Point, QuadBez,
     ParamCurve, ParamCurveArclen, ParamCurveDeriv,
 };
 
-impl BLContext<'_> {
+impl BLContext {
     /// Shapes and draws `text` along the first non-empty contour of `path`.
     ///
     /// Glyphs are positioned by advance width and rotated to the local tangent.

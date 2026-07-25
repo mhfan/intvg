@@ -7,9 +7,8 @@ pub trait Render { fn render(&self, scale: f32) -> Result<Pixmap, EvgError>; }
 
 impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
     fn render(&self, scale: f32) -> Result<Pixmap, EvgError> {
-        let mut pixm = Pixmap::new(
-            (self.header.width  as f32 * scale).ceil() as _,
-            (self.header.height as f32 * scale).ceil() as _)?;
+        let width  = (self.header.width  as f32 * scale).ceil() as _;
+        let height = (self.header.height as f32 * scale).ceil() as _;
 
         #[allow(non_local_definitions)] impl From<&Rect> for GF_Rect {
             fn from(rect: &Rect) -> Self {  // XXX: screen to world coordinates
@@ -19,7 +18,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
         }
 
         // XXX: rendering up-scale and then scale down for anti-aliasing?
-        let (mut surf, mut path) = (Surface::new(&mut pixm)?, VGPath::new()?);
+        let (mut surf, mut path) = (Surface::new(width, height)?, VGPath::new()?);
         let mut pens = GF_PenSettings::default();
 
         let trfm = GF_Matrix2D {
@@ -102,12 +101,11 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 }
             }   path.reset();
         }
-        drop(surf);
-        Ok(pixm)
+        Ok(surf.end())
     }
 }
 
-fn stroke_segment_path(seg: &Segment, surf: &mut Surface<'_>,
+fn stroke_segment_path(seg: &Segment, surf: &mut Surface,
     sten: &Stencil, pens: &mut GF_PenSettings) -> Result<(), EvgError> {
     let mut path = VGPath::new()?;
     path.move_to(seg.start.into());

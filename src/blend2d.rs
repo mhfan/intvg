@@ -51,21 +51,22 @@ fn object_init<T>() -> T { // for BLObjectCore
     unsafe { ptr::write_bytes(s.as_mut_ptr(), 0, 1); s.assume_init() }
 }
 
-pub struct BLContext<'a>(BLContextCore, PhantomData<&'a mut BLImage>);
-impl Drop for BLContext<'_> {
+pub struct BLContext(BLContextCore, Option<BLImage>);
+impl Drop for BLContext {
     fn drop(&mut self) { bl_debug!(bl_context_destroy(&mut self.0)); }
 }
 
-impl<'a> BLContext<'a> { //  https://blend2d.com/doc/group__bl__rendering.html
-    pub fn new(img: &'a mut BLImage) -> Result<Self, BLErr> {
+impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
+    pub fn new(w: u32, h: u32, fmt: BLFormat) -> Result<Self, BLErr> {
+        Self::from_image(BLImage::new(w, h, fmt)?)
+    }
+    pub fn from_image(mut img: BLImage) -> Result<Self, BLErr> {
         let mut ctx = object_init();
         bl_result!(bl_context_init_as(&mut ctx, &mut img.0, null()))?;
-        Ok(Self(ctx, PhantomData))
+        Ok(Self(ctx, Some(img)))
     }
-    pub fn get_target_image(&self) -> Result<BLImageRef<'_>, BLErr> {
-        let mut img = object_init();
-        bl_result!(bl_image_assign_weak(&mut img, bl_context_get_target_image(&self.0)))?;
-        Ok(BLImageRef(BLImage(img), PhantomData))
+    pub fn get_target_image(&self) -> &BLImage {
+        self.1.as_ref().expect("BLContext always owns its target image")
     }
     pub fn get_target_size(&self) -> BLSizeI {
         let mut sz = (0., 0.).into();
@@ -270,7 +271,10 @@ impl<'a> BLContext<'a> { //  https://blend2d.com/doc/group__bl__rendering.html
         bl_result!(bl_context_flush(&mut self.0,
             BLContextFlushFlags::BL_CONTEXT_FLUSH_SYNC))
     }
-    pub fn end(mut self) -> Result<(), BLErr> { bl_result!(bl_context_end(&mut self.0)) }
+    pub fn end(mut self) -> Result<BLImage, BLErr> {
+        bl_result!(bl_context_end(&mut self.0))?;
+        Ok(self.1.take().expect("BLContext always owns its target image"))
+    }
 
     pub fn show_rtinfo() -> Result<(), BLErr> {
         let mut  info: BLRuntimeBuildInfo  = object_init();
@@ -349,8 +353,7 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
         let rgba_opt = unsafe { &mut di.__bindgen_anon_1.__bindgen_anon_2 };
         rgba_opt.r_shift =  0; rgba_opt.g_shift =  8; rgba_opt.b_shift = 16;
 
-        let mut imgd = object_init::<b2d_ffi::BLImageData>();
-        bl_debug!(bl_image_get_data(&self.0, &mut imgd));
+        let imgd = self.data();
 
         let mut conv = object_init();
         bl_result!(bl_pixel_converter_create(&mut conv, &di, &si,
@@ -361,11 +364,26 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
         bl_result!(bl_pixel_converter_destroy(&mut conv))
     }
 
-    pub fn get_data(&self) -> BLImageData<'_> {
+    fn data(&self) -> b2d_ffi::BLImageData {
         let mut data = object_init();
         bl_debug!(bl_image_get_data(&self.0, &mut data));
-        BLImageData { data, _image: PhantomData }
+        data
     }
+    /// Returns contiguous rows; negative-stride images cannot be represented
+    /// by one forward Rust slice and return `None`.
+    pub fn pixels(&self) -> Option<&[u8]> {
+        let data = self.data();
+        if data.stride < 0 { return None; }
+        let len = data.stride as usize * data.size.h as usize;
+        if len == 0 { return Some(&[]); }
+        let ptr = core::ptr::NonNull::new(data.pixel_data.cast())?;
+        // SAFETY: Blend2D owns this pixel region and the returned slice borrows
+        // `self`, preventing mutation or destruction of the image while in use.
+        Some(unsafe { core::slice::from_raw_parts(ptr.as_ptr(), len) })
+    }
+    pub fn stride(&self) -> isize { self.data().stride }
+    pub fn height(&self) -> u32 { self.data().size.h as _ }
+    pub fn width (&self) -> u32 { self.data().size.w as _ }
 
     pub fn read_from_data(data: &[u8]) -> Result<Self, BLErr> {
         let mut img = object_init();
@@ -409,34 +427,6 @@ impl core::ops::Deref for BLImageView<'_> {
 }
 impl core::ops::DerefMut for BLImageView<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
-}
-
-/// Read-only image handle borrowed from a rendering context.
-pub struct BLImageRef<'a>(BLImage, PhantomData<&'a BLImage>);
-impl core::ops::Deref for BLImageRef<'_> {
-    fn deref(&self) -> &Self::Target { &self.0 }
-    type Target = BLImage;
-}
-
-pub struct BLImageData<'a> {
-    data: b2d_ffi::BLImageData,
-    _image: PhantomData<&'a BLImage>,
-}
-impl BLImageData<'_> {
-    /// Returns contiguous rows; negative-stride images cannot be represented
-    /// by one forward Rust slice and return `None`.
-    pub fn pixels(&self) -> Option<&[u8]> {
-        if self.data.stride < 0 { return None; }
-        let len = self.data.stride as usize * self.data.size.h as usize;
-        if  len == 0 { return Some(&[]); }
-        let ptr = core::ptr::NonNull::new(self.data.pixel_data.cast())?;
-        // SAFETY: `BLImageData` is borrowed from its source image,
-        // and the `PhantomData` prevents this view from outliving that image.
-        Some(unsafe { core::slice::from_raw_parts(ptr.as_ptr(), len) })
-    }
-    pub fn stride(&self) -> isize { self.data.stride }
-    pub fn height(&self) -> u32 { self.data.size.h as _ }
-    pub fn width (&self) -> u32 { self.data.size.w as _ }
 }
 
 #[path = "text_path.rs"] mod text_path;
@@ -1256,8 +1246,8 @@ impl std::error::Error  for BLErr {
     }
 
     #[test] fn blend2d_logo() -> Result<(), BLErr> { // Pixel color format: 0xAARRGGBB
-        let mut img = BLImage::new(480, 480, BLFormat::BL_FORMAT_PRGB32)?;
-        let mut ctx = BLContext::new(&mut img)?;     //ctx.clear_all()?;
+        let mut ctx = BLContext::new(480, 480, BLFormat::BL_FORMAT_PRGB32)?;
+        //ctx.clear_all()?;
 
         let mut radial = BLGradient::new(&BLRadialGradientValues::new(
             (180, 180).into(), (180, 180).into(), (180.0, 0.)))?;
@@ -1276,16 +1266,14 @@ impl std::error::Error  for BLErr {
             &BLRoundRect::new(&(195, 195, 270, 270).into(), 25.0), &linear)?;
         //ctx.set_comp_op(BLCompOp::BL_COMP_OP_SRC_OVER); // restore to default
 
-        ctx.end()?;
+        let img = ctx.end()?;
         img.write_to_file("target/logo_b2d.png")
     }
 
     #[test] fn minimal_demo() -> Result<(), BLErr> {
-        let mut img = BLImage::new(512, 512, BLFormat::BL_FORMAT_PRGB32)?;
-        let mut ctx = BLContext::new(&mut img)?;
-        let mut path = BLPath::new();
+        let mut ctx = BLContext::new(512, 512, BLFormat::BL_FORMAT_PRGB32)?;
 
-        path.move_to((26, 31).into());
+        let mut path = BLPath::new();           path.move_to((26,  31).into());
         path.cubic_to((642, 132).into(), (587, -136).into(), (25, 464).into());
         path.cubic_to((882, 404).into(), (144,  267).into(), (27,  31).into());
 
@@ -1302,8 +1290,8 @@ impl std::error::Error  for BLErr {
 
         ctx.fill_geometry_rgba32(&path, 0xFFFFFFFF.into())?;
         ctx.stroke_geometry_ext (&path, &linear)?;
-        ctx.end()?;     //BLContext::show_rtinfo()?;
 
+        let img = ctx.end()?;     //BLContext::show_rtinfo()?;
         img.write_to_file("target/demo_b2d.png")?; //env::var("OUT_DIR")
         Ok(())
     }
