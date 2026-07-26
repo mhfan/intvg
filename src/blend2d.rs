@@ -431,6 +431,7 @@ impl core::ops::DerefMut for BLImageView<'_> {
 
 #[path = "text_path.rs"] mod text_path;
 pub use text_path::{TextPathOptions, TextPathPaint};
+#[path = "clipping_mask.rs"] mod clipping_mask;
 
 // Future shaping options (direction, script, language, and OpenType features)
 // belong beside this RAII wrapper if BLFont's defaults are no longer sufficient.
