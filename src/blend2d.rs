@@ -222,32 +222,32 @@ impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
     pub fn reset_transform(&mut self, mat: Option<&BLMatrix2D>) {
         if let Some(mat) = mat {
             bl_debug!(bl_context_apply_transform_op(&mut self.0,
-                BLTransformOp::BL_TRANSFORM_OP_ASSIGN, mat as *const _ as _));
+                BL_TRANSFORM_OP_ASSIGN, mat as *const _ as _));
         } else {
             bl_debug!(bl_context_apply_transform_op(&mut self.0,
-                BLTransformOp::BL_TRANSFORM_OP_RESET, null()));
+                BL_TRANSFORM_OP_RESET, null()));
         }
     }
     pub fn apply_transform(&mut self, mat: &BLMatrix2D) {
         bl_debug!(bl_context_apply_transform_op(&mut self.0,
-            BLTransformOp::BL_TRANSFORM_OP_TRANSFORM, mat as *const _ as _));
+            BL_TRANSFORM_OP_TRANSFORM, mat as *const _ as _));
     }
 
     pub fn scale(&mut self, sl: BLVec2D) {
         let values = [sl.0, sl.1];
         bl_debug!(bl_context_apply_transform_op(&mut self.0,
-            BLTransformOp::BL_TRANSFORM_OP_SCALE, values.as_ptr().cast()));
+            BL_TRANSFORM_OP_SCALE, values.as_ptr().cast()));
     }
     pub fn translate(&mut self, pos: BLPoint) {
         let values = [pos.x, pos.y];
         bl_debug!(bl_context_apply_transform_op(&mut self.0,
-            BLTransformOp::BL_TRANSFORM_OP_TRANSLATE, values.as_ptr().cast()));
+            BL_TRANSFORM_OP_TRANSLATE, values.as_ptr().cast()));
     }
     pub fn rotate(&mut self, angle: f64, origin: Option<BLPoint>) {
         let origin = origin.unwrap_or((0., 0.).into());
         let values = [angle, origin.x, origin.y];
         bl_debug!(bl_context_apply_transform_op(&mut self.0,
-            BLTransformOp::BL_TRANSFORM_OP_ROTATE_PT, values.as_ptr().cast()));
+            BL_TRANSFORM_OP_ROTATE_PT, values.as_ptr().cast()));
     }
 
     pub fn set_comp_op(&mut self, cop: BLCompOp) {
@@ -639,46 +639,46 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
 
     pub fn translate(&mut self, pos: BLPoint) {
         let values = [pos.x, pos.y];
-        bl_debug!(bl_matrix2d_apply_op(self, BLTransformOp::BL_TRANSFORM_OP_TRANSLATE,
+        bl_debug!(bl_matrix2d_apply_op(self, BL_TRANSFORM_OP_TRANSLATE,
             values.as_ptr().cast()));
     }
     pub fn scale(&mut self, sl: BLVec2D) {
         let values = [sl.0, sl.1];
-        bl_debug!(bl_matrix2d_apply_op(self, BLTransformOp::BL_TRANSFORM_OP_SCALE,
+        bl_debug!(bl_matrix2d_apply_op(self, BL_TRANSFORM_OP_SCALE,
             values.as_ptr().cast()));
     }
     pub fn skew(&mut self, sk: BLVec2D) {
         let values = [sk.0, sk.1];
-        bl_debug!(bl_matrix2d_apply_op(self, BLTransformOp::BL_TRANSFORM_OP_SKEW,
+        bl_debug!(bl_matrix2d_apply_op(self, BL_TRANSFORM_OP_SKEW,
             values.as_ptr().cast()));
     }
     pub fn rotate(&mut self, angle: f64, origin: Option<BLPoint>) {
         let origin = origin.unwrap_or((0., 0.).into());
         let values = [angle, origin.x, origin.y];
         bl_debug!(bl_matrix2d_apply_op(self,
-            BLTransformOp::BL_TRANSFORM_OP_ROTATE_PT, values.as_ptr().cast()));
+            BL_TRANSFORM_OP_ROTATE_PT, values.as_ptr().cast()));
     }
 
     pub fn post_translate(&mut self, pos: BLPoint) {
         let values = [pos.x, pos.y];
         bl_debug!(bl_matrix2d_apply_op(self,
-            BLTransformOp::BL_TRANSFORM_OP_POST_TRANSLATE, values.as_ptr().cast()));
+            BL_TRANSFORM_OP_POST_TRANSLATE, values.as_ptr().cast()));
     }
     pub fn post_scale(&mut self, sl: BLVec2D) {
         let values = [sl.0, sl.1];
         bl_debug!(bl_matrix2d_apply_op(self,
-            BLTransformOp::BL_TRANSFORM_OP_POST_SCALE, values.as_ptr().cast()));
+            BL_TRANSFORM_OP_POST_SCALE, values.as_ptr().cast()));
     }
     pub fn post_skew(&mut self, sk: BLVec2D) {
         let values = [sk.0, sk.1];
         bl_debug!(bl_matrix2d_apply_op(self,
-            BLTransformOp::BL_TRANSFORM_OP_POST_SKEW, values.as_ptr().cast()));
+            BL_TRANSFORM_OP_POST_SKEW, values.as_ptr().cast()));
     }
     pub fn post_rotate(&mut self, angle: f64, origin: Option<BLPoint>) {
         let origin = origin.unwrap_or((0., 0.).into());
         let values = [angle, origin.x, origin.y];
         bl_debug!(bl_matrix2d_apply_op(self,
-            BLTransformOp::BL_TRANSFORM_OP_POST_ROTATE_PT, values.as_ptr().cast()));
+            BL_TRANSFORM_OP_POST_ROTATE_PT, values.as_ptr().cast()));
     }
 
     /*  | a b 0 |
@@ -687,19 +687,19 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
     /// A' = B * A (new = other * self)
     pub fn transform(&mut self, mat: &BLMatrix2D) {
         bl_debug!(bl_matrix2d_apply_op(self,
-            BLTransformOp::BL_TRANSFORM_OP_TRANSFORM, mat as *const _ as _));
+            BL_TRANSFORM_OP_TRANSFORM, mat as *const _ as _));
     }
     pub fn post_transform(&mut self, mat: &BLMatrix2D) {
         bl_debug!(bl_matrix2d_apply_op(self,
-            BLTransformOp::BL_TRANSFORM_OP_POST_TRANSFORM, mat as *const _ as _));
+            BL_TRANSFORM_OP_POST_TRANSFORM, mat as *const _ as _));
     }
     pub fn reset(&mut self, mat: Option<&BLMatrix2D>) {
         if let Some(mat) = mat {
             bl_debug!(bl_matrix2d_apply_op(self,
-                BLTransformOp::BL_TRANSFORM_OP_ASSIGN, mat as *const _ as _));
+                BL_TRANSFORM_OP_ASSIGN, mat as *const _ as _));
         } else {
             bl_debug!(bl_matrix2d_apply_op(self,
-                BLTransformOp::BL_TRANSFORM_OP_RESET, null()));
+                BL_TRANSFORM_OP_RESET, null()));
         }
     }
     pub fn invert(&mut self) -> Result<(), BLErr> {
@@ -721,7 +721,7 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
         bl_debug!(bl_matrix2d_map_pointd_array(self,
             pts.as_mut_ptr(), pts.as_ptr(), pts.len()));
     }
-}
+}   use BLTransformOp::*;
 pub type BLVec2D = (f64, f64);     // (f64, f64), BLSize/BLPoint
 
 /// https://blend2d.com/doc/classBLPath.html
@@ -834,8 +834,7 @@ impl BLPath {
             // and the iterator borrow prevents path mutation or drop.
                 (from_raw_parts(bl_path_get_command_data(&self.0), len),
                  from_raw_parts(bl_path_get_vertex_data(&self.0), len))
-        } };
-        BLPathIter { cmd, vtx, idx: 0 }
+        } };    BLPathIter { cmd, vtx, idx: 0 }
     }
 }
 
@@ -852,26 +851,23 @@ impl<'a> Iterator for BLPathIter<'a> {  type Item = BLPathItem;
         let idx = self.idx;
         let cmd = *self.cmd.get(idx)?;
 
-        let advance = if cmd == BLPathCmd::BL_PATH_CMD_MOVE as u8 ||
-            cmd == BLPathCmd::BL_PATH_CMD_ON as u8 ||
-            cmd == BLPathCmd::BL_PATH_CMD_CLOSE as u8 { 1
-        } else if cmd == BLPathCmd::BL_PATH_CMD_QUAD as u8 { 2
-        } else if cmd == BLPathCmd::BL_PATH_CMD_CUBIC as u8 { 3
+        let advance = if cmd == BL_PATH_CMD_MOVE as u8 ||
+            cmd == BL_PATH_CMD_ON as u8 || cmd == BL_PATH_CMD_CLOSE as u8 { 1
+        } else if cmd == BL_PATH_CMD_QUAD  as u8 { 2
+        } else if cmd == BL_PATH_CMD_CUBIC as u8 { 3
         } else { self.idx = self.cmd.len(); return None; };
 
         if  idx + advance > self.vtx.len() {
                  self.idx = self.cmd.len(); return None;
-        }   use BLPathItem::*;
+        }   use {BLPathItem::*, BLPathCmd::*};
 
-        let item = if cmd == BLPathCmd::BL_PATH_CMD_MOVE as u8 {
-             MoveTo(self.vtx[idx])
-        } else if cmd == BLPathCmd::BL_PATH_CMD_ON as u8 {
-             LineTo(self.vtx[idx])
-        } else if cmd == BLPathCmd::BL_PATH_CMD_QUAD as u8 {
+        let item = if cmd == BL_PATH_CMD_MOVE as u8 {   MoveTo(self.vtx[idx])
+        } else if cmd == BL_PATH_CMD_ON    as u8 {      LineTo(self.vtx[idx])
+        } else if cmd == BL_PATH_CMD_QUAD  as u8 {
              QuadTo(self.vtx[idx], self.vtx[idx + 1])
-        } else if cmd == BLPathCmd::BL_PATH_CMD_CUBIC as u8 {
+        } else if cmd == BL_PATH_CMD_CUBIC as u8 {
             CubicTo(self.vtx[idx], self.vtx[idx + 1], self.vtx[idx + 2])
-        } else if cmd == BLPathCmd::BL_PATH_CMD_CLOSE as u8 { Close
+        } else if cmd == BL_PATH_CMD_CLOSE as u8 {      Close
         } else { unreachable!() };
 
         self.idx += advance;
@@ -1153,15 +1149,15 @@ impl BLGradient {
         mat: Option<&BLMatrix2D>) -> Result<(), BLErr> {
         if let Some(mat) = mat {
             bl_result!(bl_gradient_apply_transform_op(&mut self.0,
-                BLTransformOp::BL_TRANSFORM_OP_ASSIGN, mat as *const _ as _))
+                BL_TRANSFORM_OP_ASSIGN, mat as *const _ as _))
         } else {
             bl_result!(bl_gradient_apply_transform_op(&mut self.0,
-                BLTransformOp::BL_TRANSFORM_OP_RESET, null()))
+                BL_TRANSFORM_OP_RESET, null()))
         }
     }
     pub fn apply_transform(&mut self, mat: &BLMatrix2D) -> Result<(), BLErr> {
         bl_result!(bl_gradient_apply_transform_op(&mut self.0,
-            BLTransformOp::BL_TRANSFORM_OP_TRANSFORM, mat as *const _ as _))
+            BL_TRANSFORM_OP_TRANSFORM, mat as *const _ as _))
     }
     // ignore other matrix related APIs: scale/skew/rotate/translate, ...
 }
