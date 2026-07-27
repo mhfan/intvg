@@ -106,10 +106,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for flag in base_flags { build.flag(flag); }
     for define in build_defines { build.define(define, None); }
 
-    #[cfg(feature = "b2d_sfp")] { //build.compiler("g++");  // XXX: required
-        build.define("BLEND2D_NO_DFP", None).flag("-fsingle-precision-constant");
-    }
-
     let compiler = build.get_compiler();
     if  compiler.is_like_msvc() {
         build.flag("-MP").flag("-GR-").flag("-GF").flag("-W4")
@@ -121,6 +117,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                  .flag("-clang:-fno-trapping-math");
         }
     } else {
+        #[cfg(feature = "b2d_sfp")] if compiler.is_like_gnu() {
+            //build.compiler("g++");  // XXX: required
+            build.define("BLEND2D_NO_DFP", None).flag("-fsingle-precision-constant");
+        }
         #[cfg(not(feature = "b2d_sfp"))]
         build.flags(["-Wall", "-Wextra", "-Wconversion", "-Wdouble-promotion"]);
         for flag in ["-Wduplicated-cond", "-Wduplicated-branches", "-Wlogical-op",
@@ -297,7 +297,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //println!("cargo:rustc-link-lib=rt");  // https://blend2d.com/doc/build-instructions.html
 
     #[allow(unused_mut)]  let mut bgen = bindgen::builder();
-    #[cfg(feature = "b2d_sfp")] { bgen = bgen.clang_arg("-DBLEND2D_NO_DFP"); }
+    #[cfg(feature = "b2d_sfp")] if compiler.is_like_gnu() {
+        bgen = bgen.clang_arg("-DBLEND2D_NO_DFP");
+    }
     bgen.header(b2d_src.join("blend2d.h").to_string_lossy())
         .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: true })
         .default_non_copy_union_style(bindgen::NonCopyUnionStyle::ManuallyDrop)

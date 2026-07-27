@@ -37,7 +37,7 @@ impl BLContext {
         if x0 >= x1 || y0 >= y1 { return Ok(()); }
         let bounds = BLRectI { x: x0, y: y0, w: (x1 - x0), h: (y1 - y0) };
 
-        let mut trfm = self.get_transform(2);
+        let mut trfm = self.final_transform();
         trfm.post_translate((-bounds.x as f64, -bounds.y as f64).into());
         let content = render_layer(&bounds, &trfm,
             BLFormat::BL_FORMAT_PRGB32, content)?;
@@ -78,7 +78,7 @@ impl BLContext {
         if path.get_size() == 0 { return Ok(None); }
 
         let mut device_path = BLPath::new();
-        device_path.add_transformed_path(path, &self.get_transform(2))?;
+        device_path.add_transformed_path(path, &self.final_transform())?;
         let bbox = device_path.get_bounding_box()?;
         let target = self.get_target_size();
         if ![bbox.x0, bbox.y0, bbox.x1, bbox.y1].iter().all(|v| v.is_finite()) {
@@ -95,7 +95,7 @@ impl BLContext {
     }
 
     fn blit_layer(&mut self, image: &BLImage, bounds: &BLRectI) -> Result<(), BLErr> {
-        let transform = self.get_transform(1);
+        let transform = self.user_transform();
         self.reset_transform(None);
         let area = local_area(bounds);
         let result = self.blit_image_d((bounds.x as f64,
@@ -144,12 +144,12 @@ fn local_area(bounds: &BLRectI) -> BLRectI {
         let mut ctx = BLContext::new(8, 4, BLFormat::BL_FORMAT_PRGB32)?;
         ctx.clear_all()?;
         ctx.translate((2.0, 0.0).into());
-        let transform = ctx.get_transform(1).get_values();
+        let transform = ctx.user_transform().get_values();
         ctx.render_mask_in((0, 0, 8, 4).into(),
             |mask| mask.fill_geometry_rgba32(
                 &mask_rect, BLRgba32::new(255, 255, 255, 255)),
             |content| content.fill_all_rgba32(BLRgba32::new(0, 255, 0, 255)))?;
-        assert_eq!(ctx.get_transform(1).get_values(), transform);
+        assert_eq!(ctx.user_transform().get_values(), transform);
         let image = ctx.end()?;
 
         assert_eq!(alpha(&image, 2, 1), 255);

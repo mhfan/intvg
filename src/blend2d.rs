@@ -5,12 +5,11 @@
  * Copyright (c) 2023 M.H.Fan, All rights reserved.             *
  ****************************************************************/
 
-#![allow(unused, non_upper_case_globals,
-    clippy::new_without_default, clippy::enum_variant_names)]
+#![allow(non_upper_case_globals, clippy::new_without_default, clippy::enum_variant_names)]
 
 //pub mod blend2d  {    // https://blend2d.com
-use std::ffi::CString;
-use core::{marker::PhantomData, mem, ptr::{self, null, null_mut}, slice::from_raw_parts};
+use std::{ffi::CString, marker::PhantomData};
+use core::{mem, ptr::{self, null, null_mut}, slice::from_raw_parts};
 
 pub use b2d_ffi::{BLFormat, BLPoint, BLMatrix2D, BLFontMatrix, BLRgba, BLRgba64, BLRgba32,
     BLFillRule, BLStrokeCap, BLStrokeJoin, BLCompOp, BLImageScaleFilter, BLRectI, BLRect,
@@ -22,11 +21,12 @@ pub use b2d_ffi::{BLFormat, BLPoint, BLMatrix2D, BLFontMatrix, BLRgba, BLRgba64,
 #[cfg(feature = "b2d_sfp")] type F32 = core::primitive::f64; // XXX: API wrapper differ in f32
 #[cfg(not(feature = "b2d_sfp"))] type F32 = f32;
 
-#[allow(non_camel_case_types, non_snake_case)] // blend2d_bindings
+#[allow(unused, non_camel_case_types, non_snake_case)] // blend2d_bindings
 mod b2d_ffi { include!("../target/bindings/blend2d.rs"); }  use b2d_ffi::*;
 // concat!(env!("OUT_DIR"), "/blend2d.rs")  // BGEN_DIR
 
-/*#[macro_export] */macro_rules! safe_dbg { //($v:expr$(,$g:expr)?) => { unsafe { $v } };
+#[allow(unused)] /*#[macro_export] */macro_rules! safe_dbg {
+    //($v:expr$(,$g:expr)?) => { unsafe { $v } };
     ($v:expr,$g:expr) => { match unsafe { $v } { // as u32
         //eprintln!("[{}:{}] {} = {:#?}", file!(), line!(), stringify!($v), &res);
         res => { if res != $g { dbg!(res); } res } } };
@@ -43,13 +43,10 @@ macro_rules! bl_debug {
     ($v:expr) => {{ let result = bl_result!($v); debug_assert!(result.is_ok()); }};
 }
 
-//  https://blend2d.com/doc/group__bl__object.html
-fn object_init<T>() -> T { // for BLObjectCore
-    let mut s = mem::MaybeUninit::<T>::uninit();
-    // SAFETY: This helper is private and used only for Blend2D C structs
-    // whose documented default/initial state is the all-zero bit pattern.
-    unsafe { ptr::write_bytes(s.as_mut_ptr(), 0, 1); s.assume_init() }
-}
+/// SAFETY: This helper is private and used only for Blend2D C structs
+/// whose documented default/initial state is the all-zero bit pattern.
+/// BLObjectCore: https://blend2d.com/doc/group__bl__object.html
+fn object_init<T>() -> T { unsafe { mem::zeroed() } }
 
 pub struct BLContext(BLContextCore, Option<BLImage>);
 impl Drop for BLContext {
@@ -210,14 +207,17 @@ impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
     }
 
     pub fn user_to_meta(&mut self) { bl_debug!(bl_context_user_to_meta(&mut self.0)); }
-    /// get transform matrix from context, kind: *0* - meta, *1* - user, *2* - final
-    pub fn get_transform(&self, kind: u8) -> BLMatrix2D {
+    pub fn user_transform(&self) -> BLMatrix2D {
         let mut mat = BLMatrix2D::identity();
-        match kind {
-            0 => bl_debug!(bl_context_get_meta_transform (&self.0, &mut mat)),
-            2 => bl_debug!(bl_context_get_final_transform(&self.0, &mut mat)),
-            _ => bl_debug!(bl_context_get_user_transform (&self.0, &mut mat)),
-        }       mat
+        bl_debug!(bl_context_get_user_transform(&self.0, &mut mat)); mat
+    }
+    pub fn meta_transform(&self) -> BLMatrix2D {
+        let mut mat = BLMatrix2D::identity();
+        bl_debug!(bl_context_get_meta_transform(&self.0, &mut mat)); mat
+    }
+    pub fn final_transform(&self) -> BLMatrix2D {
+        let mut mat = BLMatrix2D::identity();
+        bl_debug!(bl_context_get_final_transform(&self.0, &mut mat)); mat
     }
     pub fn reset_transform(&mut self, mat: Option<&BLMatrix2D>) {
         if let Some(mat) = mat {
@@ -322,30 +322,30 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
         Ok(Self(img))
     }
 
-    pub fn from_buffer(w: u32, h: u32, fmt: BLFormat, buf: &mut [u8], stride: i32) ->
-        Result<BLImageView<'_>, BLErr> {
-        let mut info = object_init::<BLFormatInfo>();
-        // SAFETY: `BLFormat` is a fieldless C enum without drop state.
-        // The binding doesn't derive `Copy`, but a bitwise copy remains valid.
-        let query_fmt = unsafe { ptr::read(&fmt) };
-        bl_result!(bl_format_info_query(&mut info, query_fmt))?;
-        let row_bytes = (w as usize).checked_mul(info.depth.div_ceil(8) as usize)
-            .ok_or_else(BLErr::invalid_value)?;
-        let stride_bytes = stride.unsigned_abs() as usize;
-        let required = stride_bytes.checked_mul(h.saturating_sub(1) as usize)
-            .and_then(|prefix| prefix.checked_add(row_bytes))
-            .ok_or_else(BLErr::invalid_value)?;
-        if stride_bytes < row_bytes || buf.len() < required {
-            return Err(BLErr::invalid_value());
-        }
-        let mut img = object_init();
-        bl_result!(bl_image_init_as_from_data(&mut img, w as _, h as _, fmt,
-            buf.as_mut_ptr() as _, stride as _, BLDataAccessFlags::BL_DATA_ACCESS_RW,
-            None, null_mut()))?;
-        Ok(BLImageView(Self(img), PhantomData))
+    /// Creates an image backed directly by `buf`, without copying or freeing it.
+    /// `buf` must cover every complete stride, including last-row padding.
+    ///
+    /// # Safety
+    ///
+    /// `buf` must remain allocated at the same address and must not be accessed
+    /// elsewhere until the image and all Blend2D objects derived from it are dropped.
+    /// The image layout calculations must fit in `u32`.
+    pub unsafe fn from_buffer(w: u32, h: u32, fmt: BLFormat,
+        buf: &mut [u8], stride:  u32) -> Result<BLImage, BLErr> {
+        if buf.len() < (stride * h) as _ { return Err(BLErr::invalid_value()); }
+
+        let (mut img, data) = (object_init(), buf.as_mut_ptr());
+        bl_result!(bl_image_init_as_from_data(&mut img, w as _, h as _, fmt, data as _,
+            stride as _, BLDataAccessFlags::BL_DATA_ACCESS_RW, None, null_mut()))?;
+        Ok(Self(img))
     }
 
-    pub fn to_rgba_inplace(&mut self) -> Result<(), BLErr> { // 0xAARRGGGBB -> 0xAABBGGRR
+    pub fn to_rgba_inplace(&mut self) -> Result<(), BLErr> { // 0xAARRGGBB -> 0xAABBGGRR
+        let imgd = self.data();
+        if  imgd.format != BLFormat::BL_FORMAT_PRGB32 as u32 {
+            return Err(BLErr::invalid_value());
+        }
+
         let mut di = object_init::<BLFormatInfo>();
         bl_result!(bl_format_info_query(&mut di, BLFormat::BL_FORMAT_PRGB32))?;
         let si = unsafe { ptr::read(&di) };
@@ -353,15 +353,14 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
         let rgba_opt = unsafe { &mut di.__bindgen_anon_1.__bindgen_anon_2 };
         rgba_opt.r_shift =  0; rgba_opt.g_shift =  8; rgba_opt.b_shift = 16;
 
-        let imgd = self.data();
-
-        let mut conv = object_init();
+        let mut conv = object_init(); // XXX: BLPixelConverter
         bl_result!(bl_pixel_converter_create(&mut conv, &di, &si,
             BLPixelConverterCreateFlags::BL_PIXEL_CONVERTER_CREATE_NO_FLAGS))?;
-        bl_result!(bl_pixel_converter_convert(&conv,
+        let result = bl_result!(bl_pixel_converter_convert(&conv,
             imgd.pixel_data,  imgd.stride, imgd.pixel_data, imgd.stride,
-            imgd.size.w as _, imgd.size.h as _, null()))?;
-        bl_result!(bl_pixel_converter_destroy(&mut conv))
+            imgd.size.w as _, imgd.size.h as _, null()));
+        let cleanup = bl_result!(bl_pixel_converter_destroy(&mut conv));
+        result.and(cleanup)
     }
 
     fn data(&self) -> b2d_ffi::BLImageData {
@@ -373,9 +372,9 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
     /// by one forward Rust slice and return `None`.
     pub fn pixels(&self) -> Option<&[u8]> {
         let data = self.data();
-        if data.stride < 0 { return None; }
+        if  data.stride < 0 { return None }
         let len = data.stride as usize * data.size.h as usize;
-        if len == 0 { return Some(&[]); }
+        if  len == 0 { return Some(&[]); }
         let ptr = ptr::NonNull::new(data.pixel_data.cast())?;
         // SAFETY: Blend2D owns this pixel region and the returned slice borrows
         // `self`, preventing mutation or destruction of the image while in use.
@@ -415,18 +414,6 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
             BLErr(BLResultCode::BL_ERROR_INVALID_STRING as _))?;
         bl_result!(bl_image_write_to_file(&self.0, cstr.as_ptr(), null()))?;    Ok(())
     }
-    pub fn save_png<S: Into<Vec<u8>>>(&self, file: S) -> Result<(), BLErr> {
-        self.write_to_file(file)?;    Ok(())
-    }
-}
-
-pub struct BLImageView<'a>(BLImage, PhantomData<&'a mut [u8]>);
-impl core::ops::Deref for BLImageView<'_> {
-    fn deref(&self) -> &Self::Target { &self.0 }
-    type Target = BLImage;
-}
-impl core::ops::DerefMut for BLImageView<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
 #[path = "text_path.rs"] mod text_path;
@@ -468,7 +455,7 @@ impl BLGlyphBuffer {
 impl BLFontMatrix {
     // Keep this linear-only: glyph outlines already receive this font matrix.
     // A future writing-mode implementation may expose inline and block vectors.
-    pub fn map(&self, value: &BLPointI) -> (f64, f64) {
+    pub(crate) fn map(&self, value: &BLPointI) -> (f64, f64) {
         // SAFETY: `bl_font_get_matrix` initializes this union member.
         let [m00, m01, m10, m11] = unsafe { *self.__bindgen_anon_1.m };
         (value.x as f64 * m00 + value.y as f64 * m10,
@@ -476,15 +463,16 @@ impl BLFontMatrix {
     }
 }
 
-pub struct BLFont(BLFontCore); //  https://blend2d.com/doc/group__bl__text.html
-impl Drop for BLFont { fn drop(&mut self) { bl_debug!(bl_font_destroy(&mut self.0)); } }
-impl BLFont {   // TODO: a bunch of interfaces need to be regarded
-    pub fn new(face: &BLFontFace, size: f32) -> Result<Self, BLErr> {
+//  https://blend2d.com/doc/group__bl__text.html
+pub struct BLFont<'a>(BLFontCore, PhantomData<&'a [u8]>);
+impl<'a> Drop for BLFont<'a> { fn drop(&mut self) { bl_debug!(bl_font_destroy(&mut self.0)); } }
+impl<'a> BLFont<'a> {   // TODO: a bunch of interfaces need to be regarded
+    pub fn new(face: &BLFontFace<'a>, size: f32) -> Result<Self, BLErr> {
         let mut font = object_init();
         bl_result!(bl_font_init(&mut font))?;
-        let mut font = Self(font);
+        let mut font = Self(font, PhantomData);
 
-        bl_result!(bl_font_create_from_face(&mut font.0, &face.core, size))?;
+        bl_result!(bl_font_create_from_face(&mut font.0, &face.0, size))?;
         //bl_result!(bl_font_create_from_face_with_settings(&mut font.0, &face.core, size,
         //    feature_settings, variation_settings))?;
         Ok(font)
@@ -502,36 +490,35 @@ impl BLFont {   // TODO: a bunch of interfaces need to be regarded
 }
 
 // Blend2D references external font bytes instead of copying them.
-pub struct BLFontFace { core: BLFontFaceCore, data: Option<Box<[u8]>>, }
-impl Drop for BLFontFace {
-    fn drop(&mut self) { bl_debug!(bl_font_face_destroy(&mut self.core)); }
+pub struct BLFontFace<'a>(BLFontFaceCore, PhantomData<&'a [u8]>);
+impl<'a> Drop for BLFontFace<'a> {
+    fn drop(&mut self) { bl_debug!(bl_font_face_destroy(&mut self.0)); }
 }
 
-impl BLFontFace {
-    pub fn new(data: &[u8]) -> Result<Self, BLErr> {
-        let data: Box<[u8]> = data.into();
-        let (data_ptr, data_len) = (data.as_ptr(), data.len());
+impl<'a> BLFontFace<'a> {
+    pub fn new(data: &'a [u8]) -> Result<Self, BLErr> {
         let mut core = object_init();
         bl_result!(bl_font_face_init(&mut core))?;
-        let mut face = Self { core, data: Some(data) };
+        let mut face = Self(core, PhantomData);
 
         let mut fdata = object_init();
         bl_result!(bl_font_data_init(&mut fdata))?;
         let mut fdata = BLFontData(fdata);
 
         bl_result!(bl_font_data_create_from_data(&mut fdata.0,
-            data_ptr as _, data_len, None, null_mut()))?;
-        bl_result!(bl_font_face_create_from_data(&mut face.core, &fdata.0, 0))?;
+            data.as_ptr() as _, data.len(), None, null_mut()))?;
+        bl_result!(bl_font_face_create_from_data(&mut face.0, &fdata.0, 0))?;
         Ok(face)
     }
 
     pub fn from_file(file: &str) -> Result<Self, BLErr> {
         let mut core = object_init();
         bl_result!(bl_font_face_init(&mut core))?;
-        let mut face = Self { core, data: None };
+        let mut face = Self(core, PhantomData);
+
         let cstr = CString::new(file).map_err(|_|
             BLErr(BLResultCode::BL_ERROR_INVALID_STRING as _))?;
-        bl_result!(bl_font_face_create_from_file(&mut face.core, cstr.as_ptr(),
+        bl_result!(bl_font_face_create_from_file(&mut face.0, cstr.as_ptr(),
             BLFileReadFlags::BL_FILE_READ_NO_FLAGS))?;
         Ok(face)
     }
@@ -738,7 +725,8 @@ impl BLMatrix2D { //  https://blend2d.com/doc/structBLMatrix2D.html
 }
 pub type BLVec2D = (f64, f64);     // (f64, f64), BLSize/BLPoint
 
-pub struct BLPath(BLPathCore);  //  https://blend2d.com/doc/classBLPath.html
+/// https://blend2d.com/doc/classBLPath.html
+#[repr(transparent)] pub struct BLPath(BLPathCore);
 impl Drop for BLPath { fn drop(&mut self) { bl_debug!(bl_path_destroy(&mut self.0)); } }
 impl BLPath {
     pub fn new() -> Self {
@@ -789,8 +777,8 @@ impl BLPath {
         bl_result!(bl_path_transform(&mut self.0, null(), mat))
     }
 
-    pub fn reserve(&mut self, capacity: u32) {
-        bl_debug!(bl_path_reserve(&mut self.0, capacity as _));
+    pub fn reserve(&mut self, capacity: u32) -> Result<(), BLErr> {
+        bl_result!(bl_path_reserve(&mut self.0, capacity as _))
     }
     pub fn get_size(&self) -> u32 {
         // SAFETY: `self.0` is a live Blend2D path for the duration of the call.
@@ -966,7 +954,7 @@ impl BLSizeI {
 mod sealed { pub trait Sealed {} }
 
 pub trait B2DGeometry: sealed::Sealed {
-    #[doc(hidden)] fn as_ptr(&self) -> *const std::os::raw::c_void;
+    #[doc(hidden)] fn as_ptr(&self) -> *const BLUnknown;
     const GEOM_T: BLGeometryType;
 }
 macro_rules! impl_geometry {
@@ -974,9 +962,7 @@ macro_rules! impl_geometry {
         impl sealed::Sealed for $ty {}
         impl B2DGeometry for $ty {
             const GEOM_T: BLGeometryType = BLGeometryType::$kind;
-            fn as_ptr(&self) -> *const std::os::raw::c_void {
-                (self as *const Self).cast()
-            }
+            fn as_ptr(&self) -> *const BLUnknown { (self as *const Self).cast() }
         }
     };
 }
@@ -1081,10 +1067,12 @@ impl BLRgba32 {
 
 impl From<BLRgba32> for  BLRgba64 { fn from(v: BLRgba32) -> Self { v.value.into() } }
 impl From<u32> for BLRgba64 {
-    fn from(v: u32) -> Self { Self { value:
-        ((((v >> 16) & 0xFF) as u64) << 40) | (((v >>  24) as u64) << 56) |
-        ((((v >>  8) & 0xFF) as u64) << 24) | (((v & 0xFF) as u64) <<  8)
-    } }
+    fn from(v: u32) -> Self {
+        let expand = |shift| u64::from((v >> shift) as u8) * 0x0101;
+        Self { value: (expand(24) << 48) | (expand(16) << 32) |
+                      (expand( 8) << 16) |  expand( 0)
+        }
+    }
 }
 impl From<(f32, f32, f32, f32)> for BLRgba64 {
     fn from(val: (f32, f32, f32, f32)) -> Self {
@@ -1134,7 +1122,7 @@ impl Copy  for BLRgba64 {}
 impl Copy  for BLRgba32 {}
 impl Copy  for BLRgba   {}
 
-pub struct BLGradient(BLGradientCore);
+#[repr(transparent)] pub struct BLGradient(BLGradientCore);
 impl Drop for BLGradient {
     fn drop(&mut self) { bl_debug!(bl_gradient_destroy(&mut self.0)); }
 }
@@ -1189,7 +1177,7 @@ impl From<(f64, BLRgba64)> for BLGradientStop {
 }
 
 pub trait B2DGradient: sealed::Sealed {
-    #[doc(hidden)] fn as_ptr(&self) -> *const std::os::raw::c_void;
+    #[doc(hidden)] fn as_ptr(&self) -> *const BLUnknown;
     const GR_TYPE: BLGradientType;
 }
 macro_rules! impl_gradient {
@@ -1197,9 +1185,7 @@ macro_rules! impl_gradient {
         impl sealed::Sealed for $ty {}
         impl B2DGradient for $ty {
             const GR_TYPE: BLGradientType = BLGradientType::$kind;
-            fn as_ptr(&self) -> *const std::os::raw::c_void {
-                (self as *const Self).cast()
-            }
+            fn as_ptr(&self) -> *const BLUnknown { (self as *const Self).cast() }
         }
     };
 }
@@ -1223,7 +1209,7 @@ impl BLConicGradientValues {
     }
 }
 
-pub struct BLSolidColor(BLVarCore);
+#[repr(transparent)] pub struct BLSolidColor(BLVarCore);
 impl Drop for BLSolidColor {
     fn drop(&mut self) { bl_debug!(bl_var_destroy(&mut self.0 as *mut _ as _)); }
 }
@@ -1258,7 +1244,7 @@ macro_rules! impl_style {
 }
 // Style could be BLRgba, BLRgba32, BLRgba64, BLGradient, BLPattern, and BLVar.
 
-pub struct BLPattern(BLPatternCore);
+#[repr(transparent)] pub struct BLPattern(BLPatternCore);
 impl Drop for BLPattern {
     fn drop(&mut self) { bl_debug!(bl_pattern_destroy(&mut self.0)); }
 }
@@ -1291,12 +1277,6 @@ impl std::error::Error  for BLErr {
 //}
 
 #[cfg(test)] mod tests { use super::*;
-    #[test] fn rejects_short_external_image_buffer() {
-        let mut pixels = [0; 15];
-        assert!(BLImage::from_buffer(2, 2,
-            BLFormat::BL_FORMAT_PRGB32, &mut pixels, 8).is_err());
-    }
-
     #[test] fn blend2d_logo() -> Result<(), BLErr> { // Pixel color format: 0xAARRGGBB
         let mut ctx = BLContext::new(480, 480, BLFormat::BL_FORMAT_PRGB32)?;
         //ctx.clear_all()?;

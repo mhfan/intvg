@@ -36,10 +36,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let eng = args.next().expect("need to specify a renderer!");
 
             #[cfg(feature = "b2d")] if eng == "b2d" {
-                intvg::render_b2d::Render::render(&tvg, 1.0)?.save_png(path)?; return Ok(())
+                return Ok(intvg::render_b2d::Render::render(&tvg, 1.0)?.write_to_file(path)?)
             }
             #[cfg(feature = "evg")] if eng == "evg" {
-                intvg::render_evg::Render::render(&tvg, 1.0)?.save_png(path)?; return Ok(())
+                return Ok(intvg::render_evg::Render::render(&tvg, 1.0)?.save_png(path)?)
             }   eprintln!("Not support `{eng}' rendering!");
         } else { tvg.render(1.0)?.save_png(path)?; }
         eprintln!("Rendering performance: {:.2} fps", 1.0 / tnow.elapsed().as_secs_f32());
