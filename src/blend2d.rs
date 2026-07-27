@@ -416,9 +416,8 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
     }
 }
 
-#[path = "text_path.rs"] mod text_path;
-pub use text_path::{TextPathOptions, TextPathPaint};
-#[path = "clipping_mask.rs"] mod clipping_mask;
+#[path = "blend2d_ext.rs"] mod blend2d_ext;
+pub use blend2d_ext::{TextPathOptions, TextPathPaint};
 
 // Future shaping options (direction, script, language, and OpenType features)
 // belong beside this RAII wrapper if BLFont's defaults are no longer sufficient.
