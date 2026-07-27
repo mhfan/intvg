@@ -25,16 +25,18 @@ impl BLContext {
         let (glyphs, fmatrix) = (font.shape(text)?, font.get_matrix());
 
         for (glyph_id, placement) in glyphs.items() {
-            let advance = fmatrix.map(&placement.advance);
-            let offset  = fmatrix.map(&placement.placement);
-            let center_distance = cursor + offset.0 + advance.0 * 0.5;
-            cursor += advance.0;
+            let advance = fmatrix.map_point(BLPoint { x: placement.advance.x as _,
+                                                      y: placement.advance.y as _ });
+            let offset  = fmatrix.map_point(BLPoint { x: placement.placement.x as _,
+                                                      y: placement.placement.y as _ });
+            let center_distance = cursor + offset.x + advance.x * 0.5;
+            cursor += advance.x;
 
             let Some((point, tangent)) = measured.sample(center_distance) else { continue; };
             let normal = (-tangent.1, tangent.0);
-            let baseline = options.baseline_offset + offset.1;
-            let origin = (point.x - tangent.0 * advance.0 * 0.5 + normal.0 * baseline,
-                          point.y - tangent.1 * advance.0 * 0.5 + normal.1 * baseline);
+            let baseline = options.baseline_offset + offset.y;
+            let origin = (point.x - tangent.0 * advance.x * 0.5 + normal.0 * baseline,
+                          point.y - tangent.1 * advance.x * 0.5 + normal.1 * baseline);
             let transform = BLMatrix2D::new([
                 tangent.0, tangent.1, -tangent.1, tangent.0, origin.0, origin.1,
             ]);

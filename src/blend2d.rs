@@ -455,11 +455,10 @@ impl BLGlyphBuffer {
 impl BLFontMatrix {
     // Keep this linear-only: glyph outlines already receive this font matrix.
     // A future writing-mode implementation may expose inline and block vectors.
-    pub(crate) fn map(&self, value: &BLPointI) -> (f64, f64) {
+    pub(crate) fn map_point(&self, pt: BLPoint) -> BLPoint {
         // SAFETY: `bl_font_get_matrix` initializes this union member.
         let [m00, m01, m10, m11] = unsafe { *self.__bindgen_anon_1.m };
-        (value.x as f64 * m00 + value.y as f64 * m10,
-         value.x as f64 * m01 + value.y as f64 * m11)
+        BLPoint { x: pt.x * m00 + pt.y * m10, y: pt.x * m01 + pt.y * m11 }
     }
 }
 
