@@ -13,8 +13,8 @@ use core::{mem, ptr::{self, null, null_mut}, slice::from_raw_parts};
 
 pub use b2d_ffi::{BLFormat, BLPoint, BLMatrix2D, BLFontMatrix, BLRgba, BLRgba64, BLRgba32,
     BLFillRule, BLStrokeCap, BLStrokeJoin, BLCompOp, BLImageScaleFilter, BLRectI, BLRect,
-    BLBox, BLLine, BLArc, BLCircle, BLEllipse, BLTriangle, BLRoundRect, BLHitTest,
-    BLLinearGradientValues, BLRadialGradientValues, BLConicGradientValues,
+    BLBox, BLLine, BLArc, BLCircle, BLEllipse, BLTriangle, BLRoundRect, BLGeometryDirection,
+    BLLinearGradientValues, BLRadialGradientValues, BLConicGradientValues, BLHitTest,
 };
 
 #[cfg(feature = "b2d_sfp")] #[allow(non_camel_case_types)] type f64 = f32;
@@ -252,6 +252,9 @@ impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
 
     pub fn set_comp_op(&mut self, cop: BLCompOp) {
         bl_debug!(bl_context_set_comp_op(&mut self.0, cop));
+    }
+    pub fn get_global_alpha(&self) -> f64 {
+        unsafe { bl_context_get_global_alpha(&self.0) }
     }
     pub fn set_global_alpha(&mut self, alpha: f64) {
         bl_debug!(bl_context_set_global_alpha(&mut self.0, alpha as _));
@@ -798,9 +801,9 @@ impl BLPath {
     }
 
     pub fn add_geometry<T: B2DGeometry>(&mut self, geom: &T,
-        mat: &BLMatrix2D) -> Result<(), BLErr> {
-        bl_result!(bl_path_add_geometry(&mut self.0, T::GEOM_T,
-            geom.as_ptr(), mat, BLGeometryDirection::BL_GEOMETRY_DIRECTION_CW))
+        mat: &BLMatrix2D, direction: Option<BLGeometryDirection>) -> Result<(), BLErr> {
+        bl_result!(bl_path_add_geometry(&mut self.0, T::GEOM_T, geom.as_ptr(), mat,
+            direction.unwrap_or(BLGeometryDirection::BL_GEOMETRY_DIRECTION_CW)))
     }
 
     pub fn add_path(&mut self, path: &BLPath) -> Result<(), BLErr> {
@@ -816,13 +819,13 @@ impl BLPath {
             &mut self.0, &path.0, null(), &options.0, approx))
     }
 
-    pub fn add_rect(&mut self, rect: &BLRect) {
+    pub fn add_rect(&mut self, rect: &BLRect, direction: Option<BLGeometryDirection>) {
         bl_debug!(bl_path_add_rect_d(&mut self.0, rect,
-            BLGeometryDirection::BL_GEOMETRY_DIRECTION_CW));
+            direction.unwrap_or(BLGeometryDirection::BL_GEOMETRY_DIRECTION_CW)));
     }
-    pub fn add_box(&mut self, bbox: &BLBox) {
+    pub fn add_box(&mut self, bbox: &BLBox, direction: Option<BLGeometryDirection>) {
         bl_debug!(bl_path_add_box_d(&mut self.0, bbox,
-            BLGeometryDirection::BL_GEOMETRY_DIRECTION_CW));
+            direction.unwrap_or(BLGeometryDirection::BL_GEOMETRY_DIRECTION_CW)));
     }
 
     pub fn iter(&self) -> BLPathIter<'_> {

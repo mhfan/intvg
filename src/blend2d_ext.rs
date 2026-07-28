@@ -59,9 +59,12 @@ impl BLContext {
     /// Renders `content` through an alpha mask produced by `mask`.
     ///
     /// `bounds` is the affected rectangle in target-device pixels. Both
-    /// callbacks retain this context's current transform, but start with fresh
-    /// paint state and transparent pixels. The composed result is then drawn
-    /// through this context's current clip, alpha, and composition operator.
+    /// callbacks inherit this context's final coordinate mapping as their meta
+    /// transform, but start with an identity user transform, fresh paint state,
+    /// and transparent pixels. They can therefore freely reset or replace their
+    /// user transform without disturbing the internal layer offset. The composed
+    /// result is then drawn through this context's current clip, alpha, and
+    /// composition operator.
     ///
     /// # Limitations
     ///
@@ -92,6 +95,7 @@ impl BLContext {
             let mut layer = BLContext::new(bounds.w as _, bounds.h as _, fmt)?;
             layer.clear_all()?;
             layer.reset_transform(Some(transform));
+            layer.user_to_meta();
             render(&mut layer)?;
             layer.end()
         }
@@ -307,7 +311,7 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
 
     #[test] fn clips_content_to_path() -> Result<(), BLErr> {
         let mut path = BLPath::new();
-        path.add_rect(&(2.0, 1.0, 3.0, 4.0).into());
+        path.add_rect(&(2.0, 1.0, 3.0, 4.0).into(), None);
 
         let mut ctx = BLContext::new(8, 8, BLFormat::BL_FORMAT_PRGB32)?;
         ctx.clear_all()?;
@@ -318,6 +322,27 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
         assert_eq!(alpha(&image, 3, 2), 255);
         assert_eq!(alpha(&image, 0, 0), 0);
         assert_eq!(alpha(&image, 6, 6), 0);
+        Ok(())
+    }
+
+    #[test] fn resetting_layer_transform_preserves_nonzero_clip_offset() ->
+        Result<(), BLErr> {
+        let rect: BLRect = (3.0, 2.0, 2.0, 3.0).into();
+        let mut path = BLPath::new();
+        path.add_rect(&rect, None);
+
+        let mut ctx = BLContext::new(8, 8, BLFormat::BL_FORMAT_PRGB32)?;
+        ctx.clear_all()?;
+        ctx.clip_to_path(&path, |layer| {
+            layer.reset_transform(None);
+            layer.fill_geometry_rgba32(&rect, BLRgba32::new(255, 0, 0, 255))
+        })?;
+        let image = ctx.end()?;
+
+        assert_eq!(alpha(&image, 3, 2), 255);
+        assert_eq!(alpha(&image, 4, 4), 255);
+        assert_eq!(alpha(&image, 2, 2), 0);
+        assert_eq!(alpha(&image, 5, 4), 0);
         Ok(())
     }
 
@@ -342,7 +367,7 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
 
     #[test] fn automatic_bounds_follow_the_final_transform() -> Result<(), BLErr> {
         let mut path = BLPath::new();
-        path.add_rect(&(0.0, 0.0, 2.0, 3.0).into());
+        path.add_rect(&(0.0, 0.0, 2.0, 3.0).into(), None);
 
         let mut ctx = BLContext::new(10, 10, BLFormat::BL_FORMAT_PRGB32)?;
         ctx.clear_all()?;
@@ -364,7 +389,7 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
         ctx.clip_to_path(&BLPath::new(), |_| { called = true; Ok(()) })?;
 
         let mut path = BLPath::new();
-        path.add_rect(&(10.0, 10.0, 2.0, 2.0).into());
+        path.add_rect(&(10.0, 10.0, 2.0, 2.0).into(), None);
         ctx.clip_to_path(&path, |_| { called = true; Ok(()) })?;
 
         assert!(!called);

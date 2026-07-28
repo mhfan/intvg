@@ -44,7 +44,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 }
                 Command::FillRects(FillCMD { fill, coll }) => {
                     let style = convert_style(self, fill)?;
-                    for rect in coll { path.add_rect(&rect.into()); }
+                    for rect in coll { path.add_rect(&rect.into(), None); }
                     ctx.fill_geometry_ext(&path, style.as_ref())?;  //path.reset();
                 }
                 Command::FillPath (FillCMD { fill, coll }) => {
@@ -94,7 +94,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     let pline = convert_style(self, line)?;
                     ctx.set_stroke_width(*lwidth as _);
 
-                    for rect in coll { path.add_rect(&rect.into()); }
+                    for rect in coll { path.add_rect(&rect.into(), None); }
                     ctx.  fill_geometry_ext(&path, paint.as_ref())?;
                     ctx.stroke_geometry_ext(&path, pline.as_ref())?; //path.reset();
                 }
