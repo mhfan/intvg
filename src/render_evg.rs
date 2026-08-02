@@ -18,12 +18,12 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
         }
 
         // XXX: rendering up-scale and then scale down for anti-aliasing?
-        let (mut surf, mut path) = (Surface::new(width, height)?, VGPath::new()?);
-        let mut pens = GF_PenSettings::default();
+        let mut surf = Surface::new(width, height, GF_PixelFormat::GF_PIXEL_RGBA)?;
+        let (mut path, mut pens) = (VGPath::new()?, GF_PenSettings::default());
 
         let trfm = GF_Matrix2D {
             m: [scale.into(), 0.into(), 0.into(), 0.into(), scale.into(), 0.into()] };
-        surf.set_matrix(&trfm);
+        surf.set_matrix(Some(&trfm));
 
         for cmd in &self.commands {
             match cmd { Command::EndOfDocument => (),
@@ -186,9 +186,7 @@ fn style_to_stencil<R: io::Read, W: io::Write>(img: &TinyVG<R, W>,
     }
 }
 
-impl From<Point> for GF_Point2D {
-    fn from(pt: Point) -> Self { Self { x: pt.x.into(), y: pt.y.into() } }
-}
+impl From<Point> for GF_Point2D { fn from(pt: Point) -> Self { (pt.x, pt.y).into() } }
 
 /* impl From<tiny_skia::Transform> for GF_Matrix2D {
     fn from(mv: tiny_skia::Transform) -> Self {

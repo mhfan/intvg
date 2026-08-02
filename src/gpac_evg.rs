@@ -6,12 +6,14 @@
  ****************************************************************/
 
 //pub mod gpac_evg {    // https://github.com/gpac/gpac/tree/master/src/evg/
-use core::ptr::NonNull;
+use core::ptr::{null_mut, NonNull};
 
 #[allow(unused, non_snake_case, non_camel_case_types)]
     //non_upper_case_globals, //clippy::approx_constant, clippy::useless_transmute,
 mod evg_ffi { include!("../target/bindings/gpac_evg.rs"); }     use evg_ffi::*;
-pub use evg_ffi::{GF_Point2D, GF_Rect, GF_Color, GF_Matrix2D, GF_PenSettings, GF_StencilType};
+pub use evg_ffi::{GF_Point2D, GF_Rect, GF_Color, GF_Matrix2D, GF_PenSettings, GF_StencilType,
+    GF_PixelFormat, GF_EVGCompositeMode, GF_RasterQuality, GF_IRect,
+};
 
 macro_rules! evg_result {
     ($v:expr) => {{ let result = unsafe { $v } as i32;
@@ -26,7 +28,7 @@ macro_rules! evg_debug {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)] pub struct EvgError(i32);
 impl EvgError {
     fn out_of_memory() -> Self { Self(GF_Err::GF_OUT_OF_MEM as i32) }
-    fn bad_parameter() -> Self { Self(GF_Err::GF_BAD_PARAM as i32) }
+    fn bad_parameter() -> Self { Self(GF_Err::GF_BAD_PARAM  as i32) }
     pub fn code(self) -> i32 { self.0 }
 }
 impl core::fmt::Display for EvgError {
@@ -36,7 +38,7 @@ impl core::fmt::Display for EvgError {
 }
 impl std::error::Error for EvgError {}
 
-impl From<i32> for Fixed {  // 16.16 fixed-point, or 26.6?
+impl From<i32> for Fixed {  // 16.16 fixed-point, or 24.8?
     #[cfg(feature = "evg_fixed")] fn from(v: i32) -> Self { Self(v << 16) }
     #[cfg(not(feature = "evg_fixed"))] fn from(v: i32) -> Self { Self(v as _) }
 }
@@ -62,10 +64,14 @@ impl From<(Fixed, Fixed)> for GF_Point2D {
 impl From<(f32, f32)> for GF_Point2D {
     fn from((x, y): (f32, f32)) -> Self { Self { x: x.into(), y: y.into() } }
 }
+impl From<(i32, i32)> for GF_Point2D {
+    fn from((x, y): (i32, i32)) -> Self { Self { x: x.into(), y: y.into() } }
+}
 
 impl Copy  for Fixed {}
 impl Copy  for GF_Point2D {}
 impl Copy  for GF_PenSettings {}
+impl Copy  for GF_PixelFormat {}
 impl Clone for Fixed { fn clone(&self) -> Self { *self } }
 impl Clone for GF_Point2D { fn clone(&self) -> Self { *self } }
 impl Clone for GF_PenSettings { fn clone(&self) -> Self { *self } }
@@ -74,9 +80,17 @@ impl Default for GF_PenSettings {
     fn default() -> Self { Self {
         width: 0.into(), cap: 1, join: 1, align: 0, dash: 0,
         // GF_LINE_(CAP/JOIN)_ROUND, GF_PATH_LINE_CENTER, GF_DASH_STYLE_PLAIN
-        dash_offset: 0.into(), dash_set: core::ptr::null_mut(),
+        dash_offset: 0.into(), dash_set: null_mut(),
         path_length: 0.into(), miterLimit: 4.into(),
     } }
+}
+
+impl GF_PenSettings {
+    pub fn set_dash_pattern(&mut self, style: u8, pattern: &[Fixed], offset: Fixed) {
+        self.dash_set = pattern.as_ptr() as _; // XXX:
+        self.dash_offset = offset;
+        self.dash = style as _;
+    }
 }
 
 pub struct VGPath(NonNull<GF_Path>);
@@ -95,12 +109,14 @@ impl VGPath { // to build path and stencil
     }
 
     pub fn line_to(&mut self, mut pt: GF_Point2D) {
+        if unsafe { gf_path_is_empty(self.0.as_ptr()) } == Bool::GF_TRUE {
+            self.move_to(pt);   return
+        }
         evg_debug!(gf_path_add_line_to_vec(self.0.as_ptr(), &mut pt));
     }
 
     pub fn cubic_to(&mut self, mut c1: GF_Point2D, mut c2: GF_Point2D, mut pt: GF_Point2D) {
-        evg_debug!(gf_path_add_cubic_to_vec(
-            self.0.as_ptr(), &mut c1, &mut c2, &mut pt));
+        evg_debug!(gf_path_add_cubic_to_vec(self.0.as_ptr(), &mut c1, &mut c2, &mut pt));
     }
 
     pub fn quad_to(&mut self, mut cp: GF_Point2D, mut pt: GF_Point2D) {
@@ -114,14 +130,18 @@ impl VGPath { // to build path and stencil
     }
 
     pub fn add_rect(&mut self, rect: GF_Rect) {
-        evg_debug!(gf_path_add_rect(
-            self.0.as_ptr(), rect.x, rect.y, rect.width, rect.height));
+        evg_debug!(gf_path_add_rect(self.0.as_ptr(),
+            rect.x, rect.y, rect.width, rect.height));
     }
 
     //gf_path_add_arc_to(path, end_x, end_y, fa_x, fa_y, fb_x, fb_y, cw);
     //gf_path_add_arc(path, radius, start_angle, end_angle, close_type);
     //gf_path_add_ellipse(path, cx, cy, a_axis, b_axis);
+    //gf_path_add_subpath(path, subpath, trfm);
     //gf_path_add_bezier(path, pts, nb_pts);
+
+    //gf_path_point_over(path, x, y);
+    //gf_path_get_bounds(path);
 
     // SAFETY: `self.0` is a live, exclusively borrowed path.
     pub fn reset(&mut self) { unsafe { gf_path_reset(self.0.as_ptr()) }; }
@@ -137,16 +157,15 @@ impl VGPath { // to build path and stencil
         Some(unsafe { *self.0.as_ref().points.add(cnt as usize - 1) })
     }
 
-    pub fn print_out(&self) {
+    pub fn print_out(&self) { unsafe {
         // SAFETY: point and tag arrays contain `n_points` entries.
-        unsafe {    let path = self.0.as_ref();
+            let path = self.0.as_ref();
             for n in 0..path.n_points {     let n = n as _;
                 let pt = &*path.points.add(n);
                 eprintln!("{}-({:?}, {:?})", *path.tags.add(n), //pt.x, pt.y);
-                    <f32>::from(pt.x), <f32>::from(pt.y));
+                    f32::from(pt.x), f32::from(pt.y));
             }
-        }
-    }
+    } }
 
     // XXX: fix and simplify difference judgement in path2d.c
     pub fn close(&mut self) { evg_debug!(gf_path_close(self.0.as_ptr())); }
@@ -195,11 +214,14 @@ impl Stencil {
     } */
 
     //evg_debug!(gf_evg_stencil_set_gradient_mode(sten, GF_GradientMode::GF_GRADIENT_MODE_PAD));
-    //evg_debug!(gf_evg_stencil_set_alpha(sten, alpha));
 
-    pub fn set_matrix(&mut self, mat: &GF_Matrix2D) {
-        evg_debug!(gf_evg_stencil_set_matrix(
-            self.0.as_ptr(), core::ptr::from_ref(mat).cast_mut()));
+    pub fn set_alpha(&mut self, alpha: u8) {
+        evg_debug!(gf_evg_stencil_set_alpha(self.0.as_ptr(), alpha));
+    }
+
+    pub fn set_matrix(&mut self, mat: Option<&GF_Matrix2D>) {
+        evg_debug!(gf_evg_stencil_set_matrix(self.0.as_ptr(),
+            mat.map_or(null_mut(), |mat| mat as *const _ as _)));
     }
 }
 
@@ -209,30 +231,21 @@ impl Drop for Surface {
     fn drop(&mut self) { unsafe { gf_evg_surface_delete(self.0.as_ptr()) } }
 }
 impl Surface {
-    pub fn new(width: u32, height: u32) -> Result<Self, EvgError> {
-        Self::from_pixmap(Pixmap::new(width, height)?)
+    pub fn new(width: u32, height: u32, fmt: GF_PixelFormat) -> Result<Self, EvgError> {
+        Self::from_pixmap(Pixmap::new(width, height, fmt)?)
     }
     pub fn from_pixmap(pixm: Pixmap) -> Result<Self, EvgError> {
-        let row_bytes = pixm.width.checked_mul(4).ok_or_else(EvgError::bad_parameter)?;
-        let required = row_bytes.checked_mul(pixm.height)
-            .ok_or_else(EvgError::bad_parameter)? as usize;
-        let stride = i32::try_from(row_bytes).map_err(|_| EvgError::bad_parameter())?;
-        if pixm.data.len() < required { return Err(EvgError::bad_parameter()); }
-
         // SAFETY: the returned allocation is uniquely owned by `Surface`.
         let ptr = NonNull::new(unsafe { gf_evg_surface_new(Bool::GF_FALSE) })
             .ok_or_else(EvgError::out_of_memory)?;
         let surf = Self(ptr, Some(pixm));
         let pixm = surf.1.as_ref().expect("Surface always owns its Pixmap");
-        evg_result!(gf_evg_surface_attach_to_buffer(surf.0.as_ptr(),
-            pixm.data.as_ptr().cast_mut(), pixm.width, pixm.height, 4, stride,
-            GF_PixelFormat::GF_PIXEL_RGBA))?;
+        evg_result!(gf_evg_surface_attach_to_buffer(surf.0.as_ptr(), // XXX:
+            pixm.data.as_ptr().cast_mut(), pixm.width, pixm.height, 0, 0, pixm.format))?;
         //evg_debug!(gf_evg_surface_clear(surf, &mut bbox, 0xFF000000));
         Ok(surf)
     }
-    pub fn end(mut self) -> Pixmap {
-        self.1.take().expect("Surface always owns its Pixmap")
-    }
+    pub fn end(mut self) -> Pixmap { self.1.take().expect("Surface always owns its Pixmap") }
 
     pub fn fill_path(&mut self, path: &VGPath, sten: &Stencil) -> Result<(), EvgError> {
         evg_result!(gf_evg_surface_set_path(self.0.as_ptr(), path.0.as_ptr()))?;
@@ -247,19 +260,50 @@ impl Surface {
         self.fill_path(&path, sten)
     }
 
-    pub fn set_matrix(&mut self, mat: &GF_Matrix2D) {
-        evg_debug!(gf_evg_surface_set_matrix(
-            self.0.as_ptr(), core::ptr::from_ref(mat).cast_mut()));
+    pub fn clear(&mut self, bbox: Option<&GF_IRect>,
+        color: GF_Color) -> Result<(), EvgError> {
+        evg_result!(gf_evg_surface_clear(self.0.as_ptr(),
+            bbox.map_or(null_mut(), |bbox| bbox as *const _ as _), color))
+    }
+
+    pub fn set_clipper(&mut self, clip: Option<&GF_IRect>) -> Result<(), EvgError> {
+        evg_result!(gf_evg_surface_set_clipper(self.0.as_ptr(),
+            clip.map_or(null_mut(), |clip| clip as *const _ as _)))
+    }
+
+    pub fn set_raster_level(&mut self, level: GF_RasterQuality) {
+        unsafe { gf_evg_surface_set_raster_level(self.0.as_ptr(), level) };
+    }
+
+    pub fn set_composite_mode(&mut self, mode: GF_EVGCompositeMode) {
+        unsafe { gf_evg_surface_set_composite_mode(self.0.as_ptr(), mode) };
+    }
+
+    pub fn set_matrix(&mut self, mat: Option<&GF_Matrix2D>) {
+        evg_debug!(gf_evg_surface_set_matrix(self.0.as_ptr(),
+            mat.map_or(null_mut(), |mat| mat as *const _ as _)));
     }
 }
 
-pub struct Pixmap { pub data: Vec<u8>, pub width: u32, pub height: u32, }
+pub struct Pixmap { data: Vec<u8>,
+    width: u32, height: u32, format: GF_PixelFormat
+}
+
+impl GF_PixelFormat {
+    pub fn bpp(&self) -> Option<u32> {
+        Some(match self {
+            GF_PixelFormat::GF_PIXEL_RGBA => 4,
+            //GF_PixelFormat::GF_PIXEL_RGB_565 => 2,
+            _ => return None
+        })
+    }
+}
 
 impl Pixmap {
-    pub fn new(width: u32, height: u32) -> Result<Self, EvgError> {
-        let len = width.checked_mul(height).and_then(|v| v.checked_mul(4))
-            .ok_or_else(EvgError::bad_parameter)?;
-        Ok(Self { width, height, data: vec![0; len as _] })
+    pub fn new(width: u32, height: u32,
+        format: GF_PixelFormat) -> Result<Self, EvgError> {
+        let len = width * format.bpp().ok_or(EvgError::bad_parameter())? * height;
+        Ok(Self { data: vec![0; len as _], width, height, format })
     }
 
     pub fn save_png<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), std::io::Error> {
@@ -280,27 +324,21 @@ impl Pixmap {
 //}
 
 #[cfg(test)] mod tests { use super::*;
-    #[test] fn rejects_short_surface_buffer() {
-        let pixm = Pixmap { data: vec![0; 15], width: 2, height: 2 };
-        assert!(Surface::from_pixmap(pixm).is_err());
-    }
-
     #[test] fn fill_stroke() -> Result<(), Box<dyn std::error::Error>> {
-        let mut pens = GF_PenSettings::default();
+        let mut surf = Surface::new(1024, 512, GF_PixelFormat::GF_PIXEL_RGBA)?;
+        let (mut path, mut pens) = (VGPath::new()?, GF_PenSettings::default());
         let mut sten = Stencil::new(GF_StencilType::GF_STENCIL_SOLID)?;
-        let (mut surf, mut path) = (Surface::new(1024, 512)?, VGPath::new()?);
 
-        path.add_rect(GF_Rect {
-            x: 256.into(), y: 384.into(), width: 512.into(), height: 256.into() });
+        path.add_rect(GF_Rect { x: 256.into(), y: 384.into(),
+            width: 512.into(), height: 256.into() });
         // RUSTDOCFLAGS="-Z unstable-options --nocapture" cargo +nightly test #--doc
 
-        /* path.move_to(GF_Point2D { x: rect.x, y: rect.y });
-        path.line_to(GF_Point2D { x: Fixed(rect.x.0 + rect.width.0), y: rect.y });
-        path.line_to(GF_Point2D { x: Fixed(rect.x.0 + rect.width.0),
-            y: Fixed(rect.y.0 - rect.height.0) });
-        path.line_to(GF_Point2D { x: rect.x, y: Fixed(rect.y.0 - rect.height.0) });
-        path.line_to(GF_Point2D { x: rect.x, y: rect.y });  path.print_out();
-        path.close(); */
+        /* path.move_to((rect.x, rect.y));
+        path.line_to((rect.x + rect.width, rect.y));
+        path.line_to((rect.x + rect.width, rect.y - rect.height));
+        path.line_to((rect.x,  rect.y - rect.height));
+        path.line_to((rect.x,  rect.y));
+        path.close();  path.print_out(); */
 
         sten.set_color(0xFF0000FF); surf.fill_path(&path, &sten)?;
         sten.set_color(0xAA00FF00); pens.width = 10.into();

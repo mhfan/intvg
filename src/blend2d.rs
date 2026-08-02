@@ -29,7 +29,8 @@ mod b2d_ffi { include!("../target/bindings/blend2d.rs"); }  use b2d_ffi::*;
     //($v:expr$(,$g:expr)?) => { unsafe { $v } };
     ($v:expr,$g:expr) => { match unsafe { $v } { // as u32
         //eprintln!("[{}:{}] {} = {:#?}", file!(), line!(), stringify!($v), &res);
-        res => { if res != $g { dbg!(res); } res } } };
+        res => { if res != $g { dbg!(res); } res }
+    } };
     ($v:expr) => { safe_dbg!($v, 0) };
 }
 
@@ -334,8 +335,8 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
     /// elsewhere until the image and all Blend2D objects derived from it are dropped.
     /// The image layout calculations must fit in `u32`.
     pub unsafe fn from_buffer(w: u32, h: u32, fmt: BLFormat,
-        buf: &mut [u8], stride:  u32) -> Result<BLImage, BLErr> {
-        if buf.len() < (stride * h) as _ { return Err(BLErr::invalid_value()); }
+        buf: &mut [u8], stride:  i32) -> Result<BLImage, BLErr> {
+        if buf.len() < (stride.unsigned_abs() * h) as _ { return Err(BLErr::invalid_value()) }
 
         let (mut img, data) = (object_init(), buf.as_mut_ptr());
         bl_result!(bl_image_init_as_from_data(&mut img, w as _, h as _, fmt, data as _,
@@ -366,10 +367,9 @@ impl BLImage { //  https://blend2d.com/doc/group__bl__imaging.html
         result.and(cleanup)
     }
 
-    fn data(&self) -> b2d_ffi::BLImageData {
+    fn data(&self) -> BLImageData {
         let mut data = object_init();
-        bl_debug!(bl_image_get_data(&self.0, &mut data));
-        data
+        bl_debug!(bl_image_get_data(&self.0, &mut data));   data
     }
     /// Returns contiguous rows; negative-stride images cannot be represented
     /// by one forward Rust slice and return `None`.

@@ -102,8 +102,7 @@ impl BLContext {
 
         let mut trfm = self.final_transform();
         trfm.post_translate((-bounds.x as f64, -bounds.y as f64).into());
-        let content = render_layer(&bounds, &trfm,
-            BLFormat::BL_FORMAT_PRGB32, content)?;
+        let content = render_layer(&bounds, &trfm, BLFormat::BL_FORMAT_PRGB32, content)?;
         let mask = render_layer(&bounds, &trfm, BLFormat::BL_FORMAT_A8, mask)?;
         let area = BLRectI { x: 0, y: 0, w: bounds.w, h: bounds.h };
 
