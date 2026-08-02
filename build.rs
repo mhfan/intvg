@@ -86,8 +86,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bgen.header(evg_dir.join("gpac").join("evg.h").to_string_lossy())
         .clang_args(["-DGPAC_DISABLE_THREADS", &format!("-I{}", evg_dir.display()) ])
         .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: true })
-        //.default_visibility(bindgen::FieldVisibilityKind::PublicCrate)
+        .default_visibility(bindgen::FieldVisibilityKind::PublicCrate)
         .allowlist_function("gf_evg_s.*").allowlist_function("gf_path_.*")
+        .allowlist_var("GF_(PATH_LINE|LINE_CAP|LINE_JOIN|DASH_STYLE)_.*")
         .merge_extern_blocks(true).new_type_alias("Fixed")//.allowlist_item("GF_LINE_.*")
         .layout_tests(false).derive_copy(false).derive_debug(false)
         //.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
@@ -352,8 +353,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ugl_cpp.set_extension("h");
     bindgen::builder().header(ugl_cpp.to_string_lossy()).opaque_type("(canvas|path)_t")
         .clang_args(["-x", "c++", "-std=c++17", &format!("-I{}", ugl_inc.display())])
-        .derive_copy(false).derive_debug(false).merge_extern_blocks(true)
         .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: true })
+        .derive_copy(false).derive_debug(false).merge_extern_blocks(true)
         .allowlist_function("(canvas|path).*").layout_tests(false)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()?.write_to_file(odir.join(module).with_extension("rs"))?;

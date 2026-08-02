@@ -19,7 +19,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
 
         // XXX: rendering up-scale and then scale down for anti-aliasing?
         let mut surf = Surface::new(width, height, GF_PixelFormat::GF_PIXEL_RGBA)?;
-        let (mut path, mut pens) = (VGPath::new()?, GF_PenSettings::default());
+        let (mut path, mut pens) = (VGPath::new()?, PenSettings::default());
 
         let trfm = GF_Matrix2D {
             m: [scale.into(), 0.into(), 0.into(), 0.into(), scale.into(), 0.into()] };
@@ -46,7 +46,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 Command::DrawLines(DrawCMD { line, lwidth, coll }) => {
                     coll.iter().for_each(|line| {
                         path.move_to(line.start.into()); path.line_to(line.  end.into());
-                    }); pens.width =  (*lwidth).into();
+                    }); pens.set_width((*lwidth).into());
                     surf.stroke_path(&path, &style_to_stencil(self, line)?, &pens)?;
                 }
                 Command::DrawLoop (DrawCMD { line, lwidth, coll },
@@ -54,20 +54,20 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     if let Some(pt) = iter.next() { path.move_to((*pt).into()) }
                     iter.for_each(|pt| path.line_to((*pt).into()));
 
-                    if !*strip { path.close(); }    pens.width = (*lwidth).into();
+                    if !*strip { path.close(); }    pens.set_width((*lwidth).into());
                     surf.stroke_path(&path, &style_to_stencil(self, line)?, &pens)?;
                 }
                 Command::DrawPath (DrawCMD {
                     line, lwidth, coll }) => {
                     let sten = style_to_stencil(self, line)?;
-                    pens.width = (*lwidth).into();
+                    pens.set_width((*lwidth).into());
 
                     for seg in coll {
                         stroke_segment_path(seg, &mut surf, &sten, &mut pens)?; }
                 }
                 Command::OutlinePolyg(fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    pens.width = (*lwidth).into();
+                    pens.set_width((*lwidth).into());
 
                     let mut iter = coll.iter();
                     if let Some(pt) = iter.next() { path.move_to((*pt).into()) }
@@ -78,7 +78,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                 }
                 Command::OutlineRects(fill, DrawCMD {
                     line, lwidth, coll }) => {
-                    pens.width = (*lwidth).into();
+                    pens.set_width((*lwidth).into());
                     let paint = style_to_stencil(self, fill)?;
                     let pline = style_to_stencil(self, line)?;
 
@@ -91,7 +91,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
                     let paint = style_to_stencil(self, fill)?;
                     let pline = style_to_stencil(self, line)?;
 
-                    pens.width = (*lwidth).into();  let mut res = false;
+                    pens.set_width((*lwidth).into());  let mut res = false;
                     for seg in coll { res = segment_to_path(seg, &mut path)?; }
                     surf.fill_path(&path, &paint)?;
 
@@ -106,7 +106,7 @@ impl<R: io::Read, W: io::Write> Render for TinyVG<R, W> {
 }
 
 fn stroke_segment_path(seg: &Segment, surf: &mut Surface,
-    sten: &Stencil, pens: &mut GF_PenSettings) -> Result<(), EvgError> {
+    sten: &Stencil, pens: &mut PenSettings) -> Result<(), EvgError> {
     let mut path = VGPath::new()?;
     path.move_to(seg.start.into());
 
@@ -116,7 +116,7 @@ fn stroke_segment_path(seg: &Segment, surf: &mut Surface,
                 let start = path.last_point().unwrap();
                 surf.stroke_path(&path, sten, pens)?;
                 path.reset(); path.move_to(start);
-            }   pens.width = width.into();
+            }   pens.set_width(width.into());
         }   process_segcmd(&mut path, &cmd.instr)?;
     }   surf.stroke_path(&path, sten, pens)
 }

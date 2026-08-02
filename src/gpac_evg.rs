@@ -11,8 +11,14 @@ use core::ptr::{null_mut, NonNull};
 #[allow(unused, non_snake_case, non_camel_case_types)]
     //non_upper_case_globals, //clippy::approx_constant, clippy::useless_transmute,
 mod evg_ffi { include!("../target/bindings/gpac_evg.rs"); }     use evg_ffi::*;
-pub use evg_ffi::{GF_Point2D, GF_Rect, GF_Color, GF_Matrix2D, GF_PenSettings, GF_StencilType,
+pub use evg_ffi::{GF_Point2D, GF_Rect, GF_Color, GF_Matrix2D, GF_StencilType,
     GF_PixelFormat, GF_EVGCompositeMode, GF_RasterQuality, GF_IRect,
+    GF_PATH_LINE_CENTER, GF_PATH_LINE_INSIDE, GF_PATH_LINE_OUTSIDE,
+    GF_LINE_CAP_FLAT, GF_LINE_CAP_ROUND, GF_LINE_CAP_SQUARE, GF_LINE_CAP_TRIANGLE,
+    GF_LINE_JOIN_MITER, GF_LINE_JOIN_ROUND, GF_LINE_JOIN_BEVEL, GF_LINE_JOIN_MITER_SVG,
+    GF_DASH_STYLE_PLAIN, GF_DASH_STYLE_DASH, GF_DASH_STYLE_DOT,
+    GF_DASH_STYLE_DASH_DOT, GF_DASH_STYLE_DASH_DASH_DOT,
+    GF_DASH_STYLE_DASH_DOT_DOT, GF_DASH_STYLE_CUSTOM, GF_DASH_STYLE_SVG,
 };
 
 macro_rules! evg_result {
@@ -70,26 +76,40 @@ impl From<(i32, i32)> for GF_Point2D {
 
 impl Copy  for Fixed {}
 impl Copy  for GF_Point2D {}
-impl Copy  for GF_PenSettings {}
 impl Copy  for GF_PixelFormat {}
 impl Clone for Fixed { fn clone(&self) -> Self { *self } }
 impl Clone for GF_Point2D { fn clone(&self) -> Self { *self } }
-impl Clone for GF_PenSettings { fn clone(&self) -> Self { *self } }
 
-impl Default for GF_PenSettings {
+#[derive(Clone)] pub struct PenSettings {
+    width: Fixed, cap: u8, join: u8, align: u8,
+    dash: u8, miter_limit: Fixed, dash_offset: Fixed,
+    dashes: Vec<Fixed>, path_length: Fixed,
+}
+impl Default for PenSettings {
     fn default() -> Self { Self {
-        width: 0.into(), cap: 1, join: 1, align: 0, dash: 0,
-        // GF_LINE_(CAP/JOIN)_ROUND, GF_PATH_LINE_CENTER, GF_DASH_STYLE_PLAIN
-        dash_offset: 0.into(), dash_set: null_mut(),
-        path_length: 0.into(), miterLimit: 4.into(),
+        width: 0.into(), cap: GF_LINE_CAP_ROUND as _, join: GF_LINE_JOIN_ROUND as _,
+        align: GF_PATH_LINE_CENTER as _, dash: GF_DASH_STYLE_PLAIN as _,
+        miter_limit: 4.into(), dash_offset: 0.into(),
+        dashes: Vec::new(), path_length: 0.into(),
     } }
 }
-
-impl GF_PenSettings {
+impl PenSettings {
+    pub fn width(&self) -> Fixed { self.width }
+    pub fn set_width(&mut self, width: Fixed) { self.width = width; }
+    pub fn set_cap(&mut self, cap: u8) { self.cap = cap; }
+    pub fn set_join(&mut self, join: u8) { self.join = join; }
+    pub fn set_align(&mut self, align: u8) { self.align = align; }
+    pub fn set_miter_limit(&mut self, limit: Fixed) { self.miter_limit = limit; }
     pub fn set_dash_pattern(&mut self, style: u8, pattern: &[Fixed], offset: Fixed) {
-        self.dash_set = pattern.as_ptr() as _; // XXX:
+        self.dash = style;
         self.dash_offset = offset;
-        self.dash = style as _;
+        self.dashes.clear();
+        self.dashes.extend_from_slice(pattern);
+    }
+    pub fn clear_dash_pattern(&mut self) {
+        self.dash = GF_DASH_STYLE_PLAIN as _;
+        self.dash_offset = 0.into();
+        self.dashes.clear();
     }
 }
 
@@ -101,7 +121,7 @@ impl Drop for VGPath {
 impl VGPath { // to build path and stencil
     pub fn new() -> Result<Self, EvgError> {
         // SAFETY: the returned allocation is uniquely owned by `VGPath`.
-        NonNull::new(unsafe { gf_path_new() }).map(Self).ok_or_else(EvgError::out_of_memory)
+        NonNull::new(unsafe { gf_path_new() }).map(Self).ok_or(EvgError::out_of_memory())
     }
 
     pub fn move_to(&mut self, mut pt: GF_Point2D) {
@@ -180,7 +200,7 @@ impl Stencil {
     pub fn new(t: GF_StencilType) -> Result<Self, EvgError> {
         // SAFETY: the returned allocation is uniquely owned by `Stencil`.
         NonNull::new(unsafe { gf_evg_stencil_new(t) })
-            .map(Self).ok_or_else(EvgError::out_of_memory)
+            .map(Self).ok_or(EvgError::out_of_memory())
     }
 
     pub fn set_color(&mut self, color: GF_Color) {
@@ -237,7 +257,7 @@ impl Surface {
     pub fn from_pixmap(pixm: Pixmap) -> Result<Self, EvgError> {
         // SAFETY: the returned allocation is uniquely owned by `Surface`.
         let ptr = NonNull::new(unsafe { gf_evg_surface_new(Bool::GF_FALSE) })
-            .ok_or_else(EvgError::out_of_memory)?;
+            .ok_or(EvgError::out_of_memory())?;
         let surf = Self(ptr, Some(pixm));
         let pixm = surf.1.as_ref().expect("Surface always owns its Pixmap");
         evg_result!(gf_evg_surface_attach_to_buffer(surf.0.as_ptr(), // XXX:
@@ -253,11 +273,27 @@ impl Surface {
     }
 
     pub fn stroke_path(&mut self, path: &VGPath, sten: &Stencil,
-        pens: &GF_PenSettings) -> Result<(), EvgError> {
-        // SAFETY: GPAC returns a newly allocated path owned by the caller.
-        let path = NonNull::new(unsafe { gf_path_get_outline(path.0.as_ptr(), *pens) })
-            .map(VGPath).ok_or_else(EvgError::out_of_memory)?;
-        self.fill_path(&path, sten)
+        pens: &PenSettings) -> Result<(), EvgError> {
+        let mut dash_set = GF_DashSettings {
+            num_dash: pens.dashes.len() as _,
+            dashes: pens.dashes.as_ptr().cast_mut(),
+        };
+        let raw = GF_PenSettings {
+            width: pens.width, cap: pens.cap as _, join: pens.join as _,
+            miterLimit: pens.miter_limit, dash_offset: pens.dash_offset,
+            align: pens.align as _, dash: pens.dash as _, path_length: pens.path_length,
+            dash_set: if pens.dashes.is_empty() { null_mut() } else { &mut dash_set },
+        };
+
+        let path_ptr = path.0.as_ptr(); // XXX: for gf_path_flatten()
+        //let path_ptr = unsafe { gf_path_clone(path.0.as_ptr()) };
+        // SAFETY: `raw` and its optional dash descriptor borrow `pens` only for this
+        // synchronous call; GPAC returns a newly allocated path owned by the caller.
+        let path = NonNull::new(unsafe { gf_path_get_outline(path_ptr, raw) })
+            .map(VGPath).ok_or(EvgError::out_of_memory())?;
+        let result = self.fill_path(&path, sten);
+        //unsafe { gf_path_del(path_ptr) };
+        result
     }
 
     pub fn clear(&mut self, bbox: Option<&GF_IRect>,
@@ -285,13 +321,14 @@ impl Surface {
     }
 }
 
-pub struct Pixmap { data: Vec<u8>,
+pub struct Pixmap { data: Vec<u8>, //stride: i32,
     width: u32, height: u32, format: GF_PixelFormat
 }
 
 impl GF_PixelFormat {
     pub fn bpp(&self) -> Option<u32> {
-        Some(match self {
+        Some(match self { // XXX:
+            GF_PixelFormat::GF_PIXEL_RGB  => 3,
             GF_PixelFormat::GF_PIXEL_RGBA => 4,
             //GF_PixelFormat::GF_PIXEL_RGB_565 => 2,
             _ => return None
@@ -326,7 +363,7 @@ impl Pixmap {
 #[cfg(test)] mod tests { use super::*;
     #[test] fn fill_stroke() -> Result<(), Box<dyn std::error::Error>> {
         let mut surf = Surface::new(1024, 512, GF_PixelFormat::GF_PIXEL_RGBA)?;
-        let (mut path, mut pens) = (VGPath::new()?, GF_PenSettings::default());
+        let (mut path, mut pens) = (VGPath::new()?, PenSettings::default());
         let mut sten = Stencil::new(GF_StencilType::GF_STENCIL_SOLID)?;
 
         path.add_rect(GF_Rect { x: 256.into(), y: 384.into(),
@@ -341,7 +378,8 @@ impl Pixmap {
         path.close();  path.print_out(); */
 
         sten.set_color(0xFF0000FF); surf.fill_path(&path, &sten)?;
-        sten.set_color(0xAA00FF00); pens.width = 10.into();
+        sten.set_color(0xAA00FF00); pens.set_width(10.into());
+        pens.set_dash_pattern(GF_DASH_STYLE_SVG as _, &[8.into(), 4.into()], 0.into());
         surf.stroke_path(&path, &sten, &pens)?;
 
         let pixm = surf.end();
