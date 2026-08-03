@@ -93,7 +93,7 @@ impl BLContext {
             render: impl FnOnce(&mut BLContext) -> Result<(), BLErr>) ->
             Result<BLImage, BLErr> {
             let mut layer = BLContext::new(bounds.w as _, bounds.h as _, fmt)?;
-            layer.clear_all()?;
+            layer.clear_rect(None)?;
             layer.reset_transform(Some(transform));
             layer.user_to_meta();
             render(&mut layer)?;
@@ -109,13 +109,12 @@ impl BLContext {
         let mut masked = BLContext::from_image(content)?;
         masked.reset_transform(None);
         masked.set_comp_op(BLCompOp::BL_COMP_OP_DST_IN);
-        masked.blit_image_d(BLPoint::new(), &mask, &area)?;
+        masked.blit_image((0, 0).into(), &mask, &area)?;
         let image = masked.end()?;
 
         let transform = self.user_transform();
         self.reset_transform(None);
-        let result = self.blit_image_d((bounds.x as f64, bounds.y as f64).into(),
-            &image, &area);
+        let result = self.blit_image((bounds.x, bounds.y).into(), &image, &area);
         self.reset_transform(Some(&transform));     result
     }
 
@@ -313,7 +312,7 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
         path.add_rect(&(2.0, 1.0, 3.0, 4.0).into(), None);
 
         let mut ctx = BLContext::new(8, 8, BLFormat::BL_FORMAT_PRGB32)?;
-        ctx.clear_all()?;
+        ctx.clear_rect(None)?;
         ctx.clip_to_path(&path, |layer|
             layer.fill_all_rgba32(BLRgba32::new(255, 0, 0, 255)))?;
         let image = ctx.end()?;
@@ -331,7 +330,7 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
         path.add_rect(&rect, None);
 
         let mut ctx = BLContext::new(8, 8, BLFormat::BL_FORMAT_PRGB32)?;
-        ctx.clear_all()?;
+        ctx.clear_rect(None)?;
         ctx.clip_to_path(&path, |layer| {
             layer.reset_transform(None);
             layer.fill_geometry_rgba32(&rect, BLRgba32::new(255, 0, 0, 255))
@@ -348,7 +347,7 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
     #[test] fn mask_and_content_share_the_parent_transform() -> Result<(), BLErr> {
         let mask_rect: BLRect = (0.0, 0.0, 2.0, 4.0).into();
         let mut ctx = BLContext::new(8, 4, BLFormat::BL_FORMAT_PRGB32)?;
-        ctx.clear_all()?;
+        ctx.clear_rect(None)?;
         ctx.translate((2.0, 0.0).into());
         let transform = ctx.user_transform().get_values();
         ctx.render_mask_in((0, 0, 8, 4).into(),
@@ -369,7 +368,7 @@ fn segment_tangent(segment: PathSeg, t: f64) -> (f64, f64) {
         path.add_rect(&(0.0, 0.0, 2.0, 3.0).into(), None);
 
         let mut ctx = BLContext::new(10, 10, BLFormat::BL_FORMAT_PRGB32)?;
-        ctx.clear_all()?;
+        ctx.clear_rect(None)?;
         ctx.translate((7.0, 2.0).into());
         ctx.rotate(core::f64::consts::FRAC_PI_2, None);
         ctx.clip_to_path(&path, |layer|

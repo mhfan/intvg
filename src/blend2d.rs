@@ -11,10 +11,11 @@
 use std::{ffi::CString, marker::PhantomData};
 use core::{mem, ptr::{self, null, null_mut}, slice::from_raw_parts};
 
-pub use b2d_ffi::{BLFormat, BLPoint, BLMatrix2D, BLFontMatrix, BLRgba, BLRgba64, BLRgba32,
-    BLFillRule, BLStrokeCap, BLStrokeJoin, BLCompOp, BLImageScaleFilter, BLRectI, BLRect,
-    BLBox, BLLine, BLArc, BLCircle, BLEllipse, BLTriangle, BLRoundRect, BLGeometryDirection,
+pub use b2d_ffi::{BLFormat, BLPoint, BLMatrix2D, BLFontMatrix, BLRgba, BLRgba32, BLRgba64,
+    BLFillRule, BLStrokeCap, BLStrokeJoin, BLCompOp, BLImageScaleFilter, BLRect, BLBox,
+    BLLine, BLArc, BLCircle, BLEllipse, BLTriangle, BLRoundRect, BLGeometryDirection,
     BLLinearGradientValues, BLRadialGradientValues, BLConicGradientValues, BLHitTest,
+    BLPointI, BLSizeI, BLRectI,
 };
 
 #[cfg(feature = "b2d_sfp")] #[allow(non_camel_case_types)] type f64 = f32;
@@ -72,19 +73,22 @@ impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
         (sz.w as u32, sz.h as u32).into()
     }
 
-    pub fn fill_geometry<T: B2DGeometry>(&mut self, geom: &T) -> Result<(), BLErr> {
-        bl_result!(bl_context_fill_geometry(&mut self.0, T::GEOM_T, geom.as_ptr()))
-    }
     pub fn fill_all_rgba32(&mut self, color: BLRgba32) -> Result<(), BLErr> {
         bl_result!(bl_context_fill_all_rgba32(&mut self.0, color.value))
     }
+    pub fn fill_geometry<T: B2DGeometry>(&mut self, geom: &T) -> Result<(), BLErr> {
+        //bl_result!(bl_context_fill_all(&mut self.0))
+        bl_result!(bl_context_fill_geometry(&mut self.0, T::GEOM_T, geom.as_ptr()))
+    }
     pub fn fill_geometry_rgba32<T: B2DGeometry>(&mut self,
         geom: &T, color: BLRgba32) -> Result<(), BLErr> {
+        //bl_result!(bl_context_fill_all_rgba32(&mut self.0, color.value))
         bl_result!(bl_context_fill_geometry_rgba32(&mut self.0, T::GEOM_T,
             geom.as_ptr(), color.value))
     }
     pub fn fill_geometry_ext<T: B2DGeometry>(&mut self,
         geom: &T, style: &dyn B2DStyle) -> Result<(), BLErr> {
+        //bl_result!(bl_context_fill_all_ext(&mut self.0, style.as_ptr()))
         bl_result!(bl_context_fill_geometry_ext(&mut self.0, T::GEOM_T,
             geom.as_ptr(), style.as_ptr()))
     }
@@ -147,64 +151,65 @@ impl BLContext { //  https://blend2d.com/doc/group__bl__rendering.html
             geom.as_ptr(), style.as_ptr()))
     }
 
-    pub fn fill_utf8_text_d_rgba32(&mut self, origin: BLPoint,
+    pub fn fill_utf8_text_rgba32(&mut self, origin: BLPointI,
         font: &BLFont, text: &str, color: BLRgba32) -> Result<(), BLErr> {
-        bl_result!(bl_context_fill_utf8_text_d_rgba32(&mut self.0, &origin, &font.0,
+        bl_result!(bl_context_fill_utf8_text_i_rgba32(&mut self.0, &origin, &font.0,
             text.as_ptr().cast(), text.len(), color.value))
     }
-    pub fn fill_utf8_text_d_ext(&mut self, origin: BLPoint,
+    pub fn fill_utf8_text_ext(&mut self, origin: BLPointI,
         font: &BLFont, text: &str, style: &dyn B2DStyle) -> Result<(), BLErr> {
-        bl_result!(bl_context_fill_utf8_text_d_ext(&mut self.0, &origin, &font.0,
+        bl_result!(bl_context_fill_utf8_text_i_ext(&mut self.0, &origin, &font.0,
             text.as_ptr().cast(), text.len(), style.as_ptr()))
     }
 
-    pub fn stroke_utf8_text_d_rgba32(&mut self, origin: BLPoint,
+    pub fn stroke_utf8_text_rgba32(&mut self, origin: BLPointI,
         font: &BLFont, text: &str, color: BLRgba32) -> Result<(), BLErr> {
-        bl_result!(bl_context_stroke_utf8_text_d_rgba32(&mut self.0, &origin, &font.0,
+        bl_result!(bl_context_stroke_utf8_text_i_rgba32(&mut self.0, &origin, &font.0,
             text.as_ptr().cast(), text.len(), color.value))
     }
-    pub fn stroke_utf8_text_d_ext(&mut self, origin: BLPoint,
+    pub fn stroke_utf8_text_ext(&mut self, origin: BLPointI,
         font: &BLFont, text: &str, style: &dyn B2DStyle) -> Result<(), BLErr> {
-        bl_result!(bl_context_stroke_utf8_text_d_ext(&mut self.0, &origin, &font.0,
+        bl_result!(bl_context_stroke_utf8_text_i_ext(&mut self.0, &origin, &font.0,
             text.as_ptr().cast(), text.len(), style.as_ptr()))
     }
 
-    pub fn blit_image_d(&mut self, origin: BLPoint,
-        img: &BLImage, img_area: &BLRectI) -> Result<(), BLErr> {
-        bl_result!(bl_context_blit_image_d(&mut self.0, &origin, &img.0, img_area))
+    pub fn blit_image(&mut self, origin: BLPointI,
+        img: &BLImage, area: &BLRectI) -> Result<(), BLErr> {
+        bl_result!(bl_context_blit_image_i(&mut self.0, &origin, &img.0, area))
     }
-    pub fn blit_scaled_image_d(&mut self, rect: &BLRect,
-        img: &BLImage, img_area: &BLRectI) -> Result<(), BLErr> {
-        bl_result!(bl_context_blit_scaled_image_d(&mut self.0, rect, &img.0, img_area))
+    pub fn blit_scaled_image(&mut self, rect: &BLRectI,
+        img: &BLImage, area: &BLRectI) -> Result<(), BLErr> {
+        bl_result!(bl_context_blit_scaled_image_i(&mut self.0, rect, &img.0, area))
     }
 
-    pub fn fill_mask_d_rgba32(&mut self, origin: BLPoint,
+    pub fn fill_mask_rgba32(&mut self, origin: BLPointI,
         mask: &BLImage, area: &BLRectI, color: BLRgba32) -> Result<(), BLErr> {
-        bl_result!(bl_context_fill_mask_d_rgba32(&mut self.0,
+        bl_result!(bl_context_fill_mask_i_rgba32(&mut self.0,
             &origin, &mask.0, area, color.value))
     }
-    pub fn fill_mask_d_ext(&mut self, origin: BLPoint,
+    pub fn fill_mask_ext(&mut self, origin: BLPointI,
         mask: &BLImage, area: &BLRectI, style: &dyn B2DStyle) -> Result<(), BLErr> {
-        bl_result!(bl_context_fill_mask_d_ext(&mut self.0,
+        bl_result!(bl_context_fill_mask_i_ext(&mut self.0,
             &origin, &mask.0, area, style.as_ptr()))
     }
 
-    pub fn clip_to_rect_d(&mut self, clip: &BLRect) -> Result<(), BLErr> {
-        bl_result!(bl_context_clip_to_rect_d(&mut self.0, clip))
+    pub fn clip_to_rect(&mut self, clip: &BLRectI) -> Result<(), BLErr> {
+        bl_result!(bl_context_clip_to_rect_i(&mut self.0, clip))
     }
     pub fn restore_clipping(&mut self) -> Result<(), BLErr> {
         bl_result!(bl_context_restore_clipping(&mut self.0))
     }
 
-    pub fn fill_rect_i_rgba32(&mut self, rect: &BLRectI,
+    pub fn fill_rect_rgba32(&mut self, rect: &BLRectI,
         color: BLRgba32) -> Result<(), BLErr> {
         bl_result!(bl_context_fill_rect_i_rgba32(&mut self.0, rect, color.value))
     }
-    pub fn clear_rect_d(&mut self, rect: &BLRect) -> Result<(), BLErr> {
-        bl_result!(bl_context_clear_rect_d(&mut self.0, rect))
-    }
-    pub fn clear_all(&mut self) -> Result<(), BLErr> {
-        bl_result!(bl_context_clear_all(&mut self.0))
+    pub fn clear_rect(&mut self, rect: Option<&BLRectI>) -> Result<(), BLErr> {
+        if let Some(rect) = rect {
+            bl_result!(bl_context_clear_rect_i(&mut self.0, rect))
+        } else {
+            bl_result!(bl_context_clear_all(&mut self.0))
+        }
     }
 
     pub fn user_to_meta(&mut self) { bl_debug!(bl_context_user_to_meta(&mut self.0)); }
@@ -908,6 +913,27 @@ impl BLRoundRect {
 
 impl BLBox  { pub fn new() -> Self { Self { x0: 0., y0: 0., x1: 0., y1: 0. } } }
 impl BLRect { pub fn new() -> Self { Self { x : 0., y : 0.,  w: 0.,  h: 0. } } }
+impl From<(BLPoint, BLPoint)> for BLBox {
+    fn from((lt, rb): (BLPoint, BLPoint)) -> Self {
+        Self { x0: lt.x, y0: lt.y, x1: rb.x, y1: rb.y }
+    }
+}
+impl From<(f64, f64, f64, f64)> for BLBox {
+    fn from(v: (f64, f64, f64, f64)) -> Self {
+        Self { x0: v.0 as _, y0: v.1 as _, x1: v.2 as _, y1: v.3 as _ }
+    }
+}
+impl From<(F32, F32, F32, F32)> for BLBox {
+    fn from(v: (F32, F32, F32, F32)) -> Self {
+        Self { x0: v.0 as _, y0: v.1 as _, x1: v.2 as _, y1: v.3 as _ }
+    }
+}
+impl From<(u32, u32, u32, u32)> for BLBox {
+    fn from(v: (u32, u32, u32, u32)) -> Self {
+        Self { x0: v.0 as _, y0: v.1 as _, x1: v.2 as _, y1: v.3 as _ }
+    }
+}
+
 impl From<(BLPoint, BLSize)> for BLRect {
     fn from((lt, sz): (BLPoint, BLSize)) -> Self {
         Self { x: lt.x, y: lt.y, w: sz.w, h: sz.h }
@@ -918,15 +944,19 @@ impl From<(BLPoint, BLPoint)> for BLRect {
         Self { x: lt.x, y: lt.y, w: rb.x - lt.x, h: rb.y - lt.y }   // .abs()?
     }
 }
-impl From<(BLPoint, BLPoint)> for BLBox {
-    fn from((lt, rb): (BLPoint, BLPoint)) -> Self {
-        Self { x0: lt.x, y0: lt.y, x1: rb.x, y1: rb.y }
+impl From<(f64, f64, f64, f64)> for BLRect {
+    fn from(v: (f64, f64, f64, f64)) -> Self {
+        Self { x: v.0 as _, y: v.1 as _, w: v.2 as _, h: v.3 as _ }
     }
 }
-
-impl From<(u32, u32, u32, u32)> for BLRectI {
-    fn from((x, y, w, h): (u32, u32, u32, u32)) -> Self {
-        Self { x: x as _, y: y as _, w: w as _, h: h as _ }
+impl From<(F32, F32, F32, F32)> for BLRect {
+    fn from(v: (F32, F32, F32, F32)) -> Self {
+        Self { x: v.0 as _, y: v.1 as _, w: v.2 as _, h: v.3 as _ }
+    }
+}
+impl From<(u32, u32, u32, u32)> for BLRect {
+    fn from(v: (u32, u32, u32, u32)) -> Self {
+        Self { x: v.0 as _, y: v.1 as _, w: v.2 as _, h: v.3 as _ }
     }
 }
 impl From<BLRectI> for BLRect {
@@ -935,17 +965,79 @@ impl From<BLRectI> for BLRect {
     }
 }
 
+impl From<(BLPointI, BLPointI)> for BLRectI {
+    fn from((lt, rb): (BLPointI, BLPointI)) -> Self {
+        Self { x: lt.x, y: lt.y, w: rb.x - lt.x, h: rb.y - lt.y }   // .abs()?
+    }
+}
+impl From<(u32, u32, u32, u32)> for BLRectI {
+    fn from(v: (u32, u32, u32, u32)) -> Self {
+        Self { x: v.0 as _, y: v.1 as _, w: v.2 as _, h: v.3 as _ }
+    }
+}
+impl From<(i32, i32, i32, i32)> for BLRectI {
+    fn from((x, y, w, h): (i32, i32, i32, i32)) -> Self { Self { x, y, w, h } }
+}
+impl Clone for BLRectI { fn clone(&self) -> Self { *self } }
+impl Copy  for BLRectI {}
+
 impl Default for BLPoint { fn default() -> Self { Self::new() } }
 impl BLPoint {
     pub fn new() -> Self { Self { x : 0., y : 0. } }
     pub fn x(&self) -> f64 { self.x as _ }
     pub fn y(&self) -> f64 { self.y as _ }
 }
+impl From<(f64, f64)> for BLPoint {
+    fn from((x, y): (f64, f64)) -> Self { Self { x: x as _, y: y as _ } }
+}
+impl From<(F32, F32)> for BLPoint {
+    fn from(v: (F32, F32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
+}
+impl From<(u32, u32)> for BLPoint {
+    fn from(v: (u32, u32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
+}
+impl From<(i32, i32)> for BLPoint {
+    fn from(v: (i32, i32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
+}
+impl From<BLPointI> for BLPoint {
+    fn from(v: BLPointI) -> Self { Self { x: v.x as _, y: v.y as _ } }
+}
+impl Clone for BLPoint { fn clone(&self) -> Self { *self } }
+impl Copy  for BLPoint {}
+
+impl From<(u32, u32)> for BLPointI {
+    fn from(v: (u32, u32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
+}
+impl From<(i32, i32)> for BLPointI {
+    fn from((x, y): (i32, i32)) -> Self { Self { x, y } }
+}
+impl Clone for BLPointI { fn clone(&self) -> Self { *self } }
+impl Copy  for BLPointI {}
+
+impl From<(f64, f64)> for BLSize  {
+    fn from(v: (f64, f64)) -> Self { Self { w: v.0 as _, h: v.1 as _ } }
+}
+impl From<(F32, F32)> for BLSize  {
+    fn from(v: (F32, F32)) -> Self { Self { w: v.0 as _, h: v.1 as _ } }
+}
+impl From<BLSizeI> for BLSize {
+    fn from(v: BLSizeI) -> Self { Self { w: v.w as _, h: v.h as _ } }
+}
+impl Clone for BLSize { fn clone(&self) -> Self { *self } }
+impl Copy  for BLSize {}
 
 impl BLSizeI {
     pub fn width (&self) -> u32 { self.w as _ }
     pub fn height(&self) -> u32 { self.h as _ }
 }
+impl From<(u32, u32)> for BLSizeI {
+    fn from(v: (u32, u32)) -> Self { Self { w: v.0 as _, h: v.1 as _ } }
+}
+impl From<(i32, i32)> for BLSizeI {
+    fn from((w, h): (i32, i32)) -> Self { Self { w, h } }
+}
+impl Clone for BLSizeI { fn clone(&self) -> Self { *self } }
+impl Copy  for BLSizeI {}
 
 // Prevent external implementations from mismatching an FFI type tag and pointer layout.
 mod sealed { pub trait Sealed {} }
@@ -972,71 +1064,6 @@ impl_geometry!(BLCircle, BL_GEOMETRY_TYPE_CIRCLE);
 impl_geometry!(BLEllipse, BL_GEOMETRY_TYPE_ELLIPSE);
 impl_geometry!(BLTriangle, BL_GEOMETRY_TYPE_TRIANGLE);
 impl_geometry!(BLRoundRect, BL_GEOMETRY_TYPE_ROUND_RECT);
-
-impl From<(f64, f64)> for BLPoint {
-    fn from((x, y): (f64, f64)) -> Self { Self { x: x as _, y: y as _ } }
-}
-impl From<(F32, F32)> for BLPoint {
-    fn from(v: (F32, F32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
-}
-impl From<(u32, u32)> for BLPoint {
-    fn from(v: (u32, u32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
-}
-impl From<(i32, i32)> for BLPoint {
-    fn from(v: (i32, i32)) -> Self { Self { x: v.0 as _, y: v.1 as _ } }
-}
-impl From<BLPoint> for (f64, f64) {
-    fn from(val: BLPoint) -> Self { (val.x as _, val.y as _) }
-}
-impl From<BLPoint> for (F32, F32) {
-    fn from(val: BLPoint) -> Self { (val.x as _, val.y as _) }
-}
-impl Clone for BLPoint { fn clone(&self) -> Self { *self } }
-impl Copy  for BLPoint {}
-
-impl From<(i32, i32)> for BLSizeI {
-    fn from((w, h): (i32, i32)) -> Self { Self { w, h } }
-}
-impl From<(u32, u32)> for BLSizeI {
-    fn from(v: (u32, u32)) -> Self { Self { w: v.0 as _, h: v.1 as _ } }
-}
-impl From<(f64, f64)> for BLSize  {
-    fn from(v: (f64, f64)) -> Self { Self { w: v.0 as _, h: v.1 as _ } }
-}
-impl From<(F32, F32)> for BLSize  {
-    fn from(v: (F32, F32)) -> Self { Self { w: v.0 as _, h: v.1 as _ } }
-}
-impl From<(f64, f64, f64, f64)> for BLBox {
-    fn from(v: (f64, f64, f64, f64)) -> Self {
-        Self { x0: v.0 as _, y0: v.1 as _, x1: v.2 as _, y1: v.3 as _ }
-    }
-}
-impl From<(F32, F32, F32, F32)> for BLBox {
-    fn from(v: (F32, F32, F32, F32)) -> Self {
-        Self { x0: v.0 as _, y0: v.1 as _, x1: v.2 as _, y1: v.3 as _ }
-    }
-}
-impl From<(u32, u32, u32, u32)> for BLBox {
-    fn from(v: (u32, u32, u32, u32)) -> Self {
-        Self { x0: v.0 as _, y0: v.1 as _, x1: v.2 as _, y1: v.3 as _ }
-    }
-}
-
-impl From<(f64, f64, f64, f64)> for BLRect {
-    fn from(v: (f64, f64, f64, f64)) -> Self {
-        Self { x: v.0 as _, y: v.1 as _, w: v.2 as _, h: v.3 as _ }
-    }
-}
-impl From<(F32, F32, F32, F32)> for BLRect {
-    fn from(v: (F32, F32, F32, F32)) -> Self {
-        Self { x: v.0 as _, y: v.1 as _, w: v.2 as _, h: v.3 as _ }
-    }
-}
-impl From<(u32, u32, u32, u32)> for BLRect {
-    fn from(v: (u32, u32, u32, u32)) -> Self {
-        Self { x: v.0 as _, y: v.1 as _, w: v.2 as _, h: v.3 as _ }
-    }
-}
 
 impl From<u32> for BLRgba32 { fn from(value: u32) -> Self { Self { value } } }
 impl From<(u8, u8, u8, u8)> for BLRgba32 {  // (r, g, b, a) -> 0xAARRGGBB
@@ -1252,6 +1279,19 @@ impl BLPattern {
             BLExtendMode::BL_EXTEND_MODE_REFLECT, null()))?;
         Ok(Self(pat))
     }
+
+    pub fn set_area(&mut self, area: &BLRectI) {
+        bl_debug!(bl_pattern_set_area(&mut self.0, area as _));
+    }
+
+    pub fn set_extend_mode(&mut self, mode: BLExtendMode) {
+        bl_debug!(bl_pattern_set_extend_mode(&mut self.0, mode));
+    }
+
+    pub fn apply_transform(&mut self, mat: &BLMatrix2D) {
+        bl_debug!(bl_pattern_apply_transform_op(&mut self.0,
+            BL_TRANSFORM_OP_TRANSFORM, mat as *const _ as _));
+    }
 }
 impl_style!(BLPattern);
 impl_style!(BLGradient);
@@ -1276,7 +1316,7 @@ impl std::error::Error  for BLErr {
 #[cfg(test)] mod tests { use super::*;
     #[test] fn blend2d_logo() -> Result<(), BLErr> { // Pixel color format: 0xAARRGGBB
         let mut ctx = BLContext::new(480, 480, BLFormat::BL_FORMAT_PRGB32)?;
-        //ctx.clear_all()?;
+        //ctx.clear_rect(None)?;
 
         let mut radial = BLGradient::new(&BLRadialGradientValues::new(
             (180, 180).into(), (180, 180).into(), (180.0, 0.)))?;
